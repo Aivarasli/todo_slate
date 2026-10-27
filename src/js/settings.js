@@ -6,6 +6,7 @@ export const DEFAULTS = Object.freeze({
   onTop: true,
   allWorkspaces: true,
   collapseIdle: false,
+  dimCollapsed: true, // fade the collapsed strip to 70%
   opacity: 100, // percent, 30 to 100
   theme: 'auto', // auto | light | dark
   filter: 'today', // the list tab last used: today | open | all | done
@@ -23,6 +24,7 @@ export function clean(raw) {
     onTop: typeof r.onTop === 'boolean' ? r.onTop : DEFAULTS.onTop,
     allWorkspaces: typeof r.allWorkspaces === 'boolean' ? r.allWorkspaces : DEFAULTS.allWorkspaces,
     collapseIdle: typeof r.collapseIdle === 'boolean' ? r.collapseIdle : DEFAULTS.collapseIdle,
+    dimCollapsed: typeof r.dimCollapsed === 'boolean' ? r.dimCollapsed : DEFAULTS.dimCollapsed,
     opacity: Number.isFinite(op) ? Math.min(100, Math.max(MIN_OPACITY, Math.round(op))) : DEFAULTS.opacity,
     theme: ['auto', 'light', 'dark'].includes(r.theme) ? r.theme : DEFAULTS.theme,
     filter: ['today', 'open', 'all', 'done'].includes(r.filter) ? r.filter : DEFAULTS.filter,
@@ -54,5 +56,6 @@ export function apply(settings, doc = globalThis.document) {
   const root = doc.documentElement;
   if (settings.theme === 'auto') delete root.dataset.theme;
   else root.dataset.theme = settings.theme;
+  root.classList.toggle('dim-collapsed', !!settings.dimCollapsed);
   root.style.setProperty('--win-opacity', String(settings.opacity / 100));
 }

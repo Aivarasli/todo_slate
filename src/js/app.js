@@ -575,6 +575,7 @@ function render() {
   els.settings.hidden = state.mode !== 'settings';
   els.about.hidden = state.mode !== 'about';
   els.strip.hidden = state.mode !== 'collapsed';
+  document.documentElement.classList.toggle('is-collapsed', state.mode === 'collapsed');
   if (state.mode !== 'main') { state.lightId = null; closeMenu(); }
   if (state.mode === 'main') { renderTitlebar(); renderHead(); renderTabs(); renderList(); renderFoot(); }
   else if (state.mode === 'settings') renderSettings();
@@ -1070,6 +1071,7 @@ function renderSettings() {
       switchRow('Show on all desktops', null, state.settings.allWorkspaces, (v) => saveSettings({ allWorkspaces: v })),
       switchRow('Click-through', 'Clicks pass to the windows below. Turn off with Opt Shift C or the menu bar icon.', state.clickThrough, (v) => setClickThrough(v)),
       h('div', { class: 'set-row' }, h('label', { class: 'what', for: 'opacity' }, h('b', null, 'Opacity')), h('div', { style: 'display:flex;align-items:center;gap:8px' }, slider, opVal)),
+      switchRow('Fade when collapsed', 'The strip dims to 70%, and returns to full when the pointer is over it', state.settings.dimCollapsed, (v) => saveSettings({ dimCollapsed: v })),
       switchRow('Collapse when idle', 'Shrinks to your next task after 10 seconds without focus', state.settings.collapseIdle, (v) => saveSettings({ collapseIdle: v })),
     ]),
     section('Anywhere', SHORTCUTS_GLOBAL.map(([n, k]) => kbd(n, k)), 'shortcuts'),
@@ -1111,23 +1113,61 @@ function renderAbout() {
 }
 
 // ---------- collapse ----------
+let moveTok = 0;
+const MOVE_MS = 460;
+const FADE_MS = 160;
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Slide the window to a size. Instant when motion is reduced or outside the app.
+async function moveTo(size, tok) {
+  if (!native.inTauri || !motionOK()) return native.resize(size.w, size.h);
+  const from = await native.logicalSize();
+  await native.glide(from, size, MOVE_MS, () => tok === moveTok);
+}
+
+function playIn(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 400);
+}
+
 async function collapse(auto) {
-  if (state.mode !== 'main') return;
+  if (state.mode !== 'main' || state.collapsing) return;
+  const tok = ++moveTok;
   const size = await native.logicalSize();
   if (size) state.expandedSize = size;
+  const animate = native.inTauri && motionOK();
+  if (animate) {
+    // Content fades first, so it is never squeezed while the window shrinks.
+    state.collapsing = true;
+    els.win.classList.add('out');
+    await wait(FADE_MS);
+    state.collapsing = false;
+    els.win.classList.remove('out');
+    if (tok !== moveTok || state.mode !== 'main') return;
+  }
   state.mode = 'collapsed';
   state.autoCollapsed = !!auto;
   render();
-  await native.resize(COLLAPSED.w, COLLAPSED.h);
+  if (animate) playIn(els.strip, 'in');
+  await moveTo(COLLAPSED, tok);
 }
 
 async function expand() {
+  const tok = ++moveTok;
+  const s = state.expandedSize || DEFAULT_SIZE;
   state.mode = 'main';
   state.autoCollapsed = false;
   skipFlip = true;
+  const animate = native.inTauri && motionOK();
+  // The list keeps its final height while the window grows, so nothing reflows mid-way.
+  els.win.style.setProperty('--h', s.h + 'px');
+  els.win.classList.toggle('growing', animate);
   render();
-  const s = state.expandedSize || DEFAULT_SIZE;
-  await native.resize(s.w, s.h);
+  if (animate) playIn(els.main, 'in');
+  await moveTo(s, tok);
+  if (tok === moveTok) els.win.classList.remove('growing');
 }
 
 // ---------- wiring ----------
