@@ -22,6 +22,20 @@ export const native = {
   setAllWorkspaces: (on) => guard(() => win().setVisibleOnAllWorkspaces(on)),
   setClickThrough: (on) => guard(() => win().setIgnoreCursorEvents(on)),
   resize: (w, h) => guard(() => win().setSize(new T.dpi.LogicalSize(w, h))),
+  // Glides the window to a new size, one setSize per frame, each waiting for the last.
+  // `alive()` lets a newer move cancel this one.
+  async glide(from, to, ms, alive) {
+    if (!T || !from) return this.resize(to.w, to.h);
+    const t0 = performance.now();
+    for (;;) {
+      if (!alive()) return false;
+      const k = Math.min(1, (performance.now() - t0) / ms);
+      const e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      await this.resize(Math.round(from.w + (to.w - from.w) * e), Math.round(from.h + (to.h - from.h) * e));
+      if (k >= 1) return true;
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+  },
   hide: () => guard(() => win().hide()),
   emit: (name, payload) => guard(() => T.event.emit(name, payload)),
   invoke: (cmd, args) => guard(() => T.core.invoke(cmd, args)),

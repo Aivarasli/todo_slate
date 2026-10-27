@@ -167,7 +167,7 @@ body.reordering, body.reordering .row .t { cursor: grabbing; }
 .empty { padding: 28px 0 8px; text-align: center; }
 
 /* Collapsed strip */
-.strip { display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 12px 0 0; }
+.strip { display: flex; align-items: center; gap: 8px; height: 54px; flex: none; padding: 0 12px 0 0; }
 .strip .check { margin-left: -2px; }
 .strip .next { min-width: 0; display: grid; gap: 1px; }
 .strip .next .name { font-size: 15px; font-weight: 500; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -260,5 +260,15 @@ body.clickthrough .win { cursor: default; }
   .foot .btn { padding: 6px 8px; }
   .tabs .btn { padding: 6px 9px; }
 }
+
+html.dim-collapsed.is-collapsed .win { opacity: calc(var(--win-opacity, 1) * .7); }
+html.dim-collapsed.is-collapsed .win:hover { opacity: var(--win-opacity, 1); }
+.win { transition: opacity 500ms var(--ease); }
+/* Collapsing and expanding. The content fades; the window itself is resized from the app. */
+.win .view { transition: opacity 160ms var(--ease); }
+.win.out .view { opacity: 0; }
+.win.growing > .view:first-child { height: var(--h); flex: none; }
+@keyframes view-in { from { opacity: 0; } to { opacity: 1; } }
+.view.in { animation: view-in 320ms var(--ease) 120ms both; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
