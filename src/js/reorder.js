@@ -49,10 +49,17 @@ export function wireReorder(li, { scroller, onDrop }) {
       const dy = Math.max(lo, Math.min(hi, (lastY - startY) + (scroller.scrollTop - startScroll)));
       li.style.transform = `translateY(${dy}px)`;
 
-      // Where it would land: after every other row whose middle is above its own middle.
-      const centre = geo[from].top + dy + geo[from].h / 2;
+      // Where it would land. A row above stays above until the dragged row's top edge crosses its middle;
+      // a row below moves above once the dragged row's bottom edge passes its middle. Using the edges
+      // (not the dragged row's own middle) lets tall rows, such as two-line titles, reach the very top.
+      const top = geo[from].top + dy;
+      const bottom = top + geo[from].h;
       let j = 0;
-      for (let i = 0; i < rows.length; i++) if (i !== from && geo[i].top + geo[i].h / 2 < centre) j++;
+      for (let i = 0; i < rows.length; i++) {
+        if (i === from) continue;
+        const mid = geo[i].top + geo[i].h / 2;
+        if (i < from ? top >= mid : bottom > mid) j++;
+      }
       target = j;
 
       let k = 0; // position among the other rows

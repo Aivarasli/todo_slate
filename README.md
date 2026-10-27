@@ -39,7 +39,7 @@ In the list:
 | `[` `]` | Previous or next list |
 | `Up` `Down`, `J` `K` | Move between tasks (`Home` `End` for first and last) |
 | `Space` or `X` | Tick or untick the task |
-| `Enter` or `E` | Edit the title |
+| `Enter`, `E` or `F2` | Rename (or right-click a task for Rename, Set date, Delete) |
 | `Backspace` | Delete (`Cmd Z` or Undo brings it back) |
 | `Alt Up` / `Alt Down` | Move the task within its group |
 | `D` | Open the task bar (dates, edit, delete) |
