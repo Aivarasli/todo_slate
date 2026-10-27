@@ -17,11 +17,24 @@ function cleanTitle(s) {
   return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE);
 }
 
-export function createTask({ title, due = null, time = null }, now = Date.now()) {
+// A task's picture: the full image lives in IndexedDB under `id`; the task keeps a small
+// thumbnail (a data URL) so the avatar draws without any lookup.
+export function cleanImg(x) {
+  if (!x || typeof x !== 'object') return null;
+  const { id, w, h: ht, bytes, thumb } = x;
+  if (typeof id !== 'string' || !id || id.length > 80) return null;
+  if (!Number.isFinite(w) || !Number.isFinite(ht) || w < 1 || ht < 1) return null;
+  if (typeof thumb !== 'string' || thumb.length > 40000 || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(thumb)) return null;
+  return { id, w: Math.round(w), h: Math.round(ht), bytes: Number.isFinite(bytes) && bytes > 0 ? Math.round(bytes) : 0, thumb };
+}
+
+export function createTask({ title, due = null, time = null, img = null }, now = Date.now()) {
   const t = cleanTitle(title);
   if (!t) return null;
   const hasDue = !!parseISO(due);
+  const pic = cleanImg(img);
   return {
+    ...(pic ? { img: pic } : {}),
     id: newId(),
     title: t,
     done: false,
@@ -48,7 +61,9 @@ export function normalize(raw, now = Date.now()) {
     seen.add(id);
     const done = x.done === true;
     const hasDue = !!parseISO(x.due);
+    const pic = cleanImg(x.img);
     tasks.push({
+      ...(pic ? { img: pic } : {}),
       id,
       title,
       done,
@@ -76,6 +91,20 @@ export function renameTask(tasks, id, title) {
 export function setDue(tasks, id, due, time = null) {
   const ok = !!parseISO(due);
   return mapTask(tasks, id, (t) => ({ ...t, due: ok ? due : null, time: ok && TIME_RE.test(time || '') ? time : null }));
+}
+
+// Attach a picture (img = {id,w,h,bytes,thumb}) or remove it (img = null).
+export function setImage(tasks, id, img) {
+  const pic = cleanImg(img);
+  return mapTask(tasks, id, (t) => {
+    const { img: _old, ...rest } = t;
+    return pic ? { ...rest, img: pic } : rest;
+  });
+}
+
+// Ids of every picture still in use, for cleaning up the stored files.
+export function imageIds(tasks) {
+  return new Set(tasks.filter((t) => t.img).map((t) => t.img.id));
 }
 
 export function removeTask(tasks, id) {
