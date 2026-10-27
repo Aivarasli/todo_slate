@@ -1,0 +1,28 @@
+[package]
+name = "slate-tasks"
+version = "0.1.0"
+description = "A quiet, always-on-top to-do list for Mac, in the look of Slate."
+authors = ["Aivaras Ligeika"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "slate_tasks_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# macos-private-api: needed for the transparent window that makes the opacity setting work.
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-window-state = "2"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

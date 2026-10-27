@@ -1,0 +1,17 @@
+{
+  "name": "slate-tasks",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A quiet, always-on-top to-do list for Mac, in the look of Slate.",
+  "scripts": {
+    "test": "node --test \"tests/*.test.mjs\"",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "serve": "python3 -m http.server 5173 --directory src",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
