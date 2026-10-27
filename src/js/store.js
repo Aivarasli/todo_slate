@@ -1,8 +1,9 @@
 // Persistence. Tasks live in localStorage, which every window of the app shares.
 // Reads never throw; a damaged store is kept aside as a backup before anything is overwritten.
-import { normalize, SCHEMA_VERSION } from './logic.js';
+import { normalize, cleanDeleted, SCHEMA_VERSION } from './logic.js';
 
 export const KEY = 'slate-tasks:v1';
+export const DELETED_KEY = 'slate-tasks:deleted';
 
 function ls() {
   try { return globalThis.localStorage || null; } catch { return null; }
@@ -31,4 +32,16 @@ export function save(tasks) {
   } catch {
     return false;
   }
+}
+
+// Delete markers (id -> time). They let a deletion travel to another machine through the synced folder.
+export function loadDeleted() {
+  const s = ls();
+  try { return s ? cleanDeleted(JSON.parse(s.getItem(DELETED_KEY) || '{}')) : {}; } catch { return {}; }
+}
+
+export function saveDeleted(deleted) {
+  const s = ls();
+  if (!s) return false;
+  try { s.setItem(DELETED_KEY, JSON.stringify(deleted)); return true; } catch { return false; }
 }

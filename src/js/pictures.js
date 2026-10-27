@@ -1,8 +1,11 @@
 // Pictures attached to tasks. A dropped image is resized to fit 1280x720 (720x1280 when it is
 // portrait), never enlarged, saved as JPEG in IndexedDB, and a 96px square thumbnail is kept on
 // the task for the avatar. Everything here stays on this Mac.
+import { native } from './native.js';
+
 export const MAX_W = 1280;
 export const MAX_H = 720;
+export const MAX_PIXELS = 100e6;
 export const MAX_INPUT = 40 * 1024 * 1024; // refuse files larger than this before decoding
 const QUALITY = 0.8;
 const THUMB = 96;
@@ -73,6 +76,7 @@ export async function prepare(file) {
   try { pic = await decode(file); } catch { throw new Error('decode'); }
   try {
     if (!(pic.w > 0 && pic.h > 0)) throw new Error('decode');
+    if (pic.w * pic.h > MAX_PIXELS) throw new Error('large'); // a decoded 100-megapixel picture needs hundreds of MB
     const { w, h } = fitSize(pic.w, pic.h);
     const bg = paperColour();
     const full = document.createElement('canvas');
@@ -124,15 +128,73 @@ async function run(mode, fn) {
   });
 }
 
-export const put = (id, blob) => run('readwrite', (s) => s.put(blob, id));
+const idbPut = (id, blob) => run('readwrite', (s) => s.put(blob, id));
 export const remove = (id) => run('readwrite', (s) => s.delete(id));
 export const keys = () => run('readonly', (s) => s.getAllKeys());
 export const getBlob = (id) => run('readonly', (s) => s.get(id));
+
+// ---------- the synced folder (optional) ----------
+// With a folder set, every picture is also kept there as pictures/<id>.jpg, and a picture another
+// machine added is fetched from it on first use and cached here.
+let folder = null;
+export const setFolder = (dir) => { folder = dir || null; };
+export const hasFolder = () => !!folder;
+
+const b64Of = async (blob) => (await readDataURL(blob)).split(',')[1] || '';
+function blobFromB64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: 'image/jpeg' });
+}
+
+export async function put(id, blob) {
+  await idbPut(id, blob);
+  if (folder) { try { await native.call('pic_write', { dir: folder, id, data: await b64Of(blob) }); } catch { /* the sync pass uploads it later */ } }
+}
+
+export const folderList = () => native.call('pic_list', { dir: folder }); // [[id, modifiedMs], ...]
+export const folderRemove = (id) => native.call('pic_remove', { dir: folder, id });
+
+// Uploads pictures that exist only on this Mac. Returns how many went up.
+export async function uploadMissing(ids) {
+  if (!folder || !ids.length) return 0;
+  const have = new Set((await folderList()).map(([id]) => id));
+  let n = 0;
+  for (const id of ids) {
+    if (have.has(id)) continue;
+    const blob = await getBlob(id).catch(() => null);
+    if (!blob) continue;
+    await native.call('pic_write', { dir: folder, id, data: await b64Of(blob) });
+    n++;
+  }
+  return n;
+}
+
+// Brings pictures that exist only in the folder onto this Mac (used when leaving folder storage).
+export async function pullMissing(ids, dir = folder) {
+  if (!dir) return 0;
+  const local = new Set(await keys().catch(() => []));
+  let n = 0;
+  for (const id of ids) {
+    if (local.has(id)) continue;
+    const b64 = await native.call('pic_read', { dir, id }).catch(() => null);
+    if (b64) { await idbPut(id, blobFromB64(b64)); n++; }
+  }
+  return n;
+}
 
 // The stored picture as a data URL, or null when it is missing.
 export async function dataURL(id) {
   try {
     const blob = await getBlob(id);
-    return blob ? await readDataURL(blob) : null;
+    if (blob) return await readDataURL(blob);
+  } catch { /* fall through to the folder */ }
+  if (!folder) return null;
+  try {
+    const b64 = await native.call('pic_read', { dir: folder, id });
+    if (!b64) return null;
+    idbPut(id, blobFromB64(b64)).catch(() => {}); // keep a copy on this Mac
+    return `data:image/jpeg;base64,${b64}`;
   } catch { return null; }
 }

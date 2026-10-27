@@ -1,3 +1,6 @@
+mod sync;
+
+use serde::Serialize;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
@@ -30,6 +33,71 @@ fn open_url(url: String) -> Result<(), String> {
         let _ = std::process::Command::new("open").arg(&url).status();
     });
     Ok(())
+}
+
+// ---------- folder storage (see sync.rs) ----------
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StatOut {
+    exists: bool,
+    mtime_ms: u64,
+    len: u64,
+}
+
+impl From<sync::Stat> for StatOut {
+    fn from(s: sync::Stat) -> Self {
+        StatOut { exists: s.exists, mtime_ms: s.mtime_ms, len: s.len }
+    }
+}
+
+#[tauri::command]
+async fn sync_stat(dir: String) -> Result<StatOut, String> {
+    sync::tasks_stat(&dir).map(Into::into)
+}
+
+#[tauri::command]
+async fn sync_read(dir: String) -> Result<Option<String>, String> {
+    sync::read_tasks(&dir)
+}
+
+#[tauri::command]
+async fn sync_write(dir: String, text: String) -> Result<StatOut, String> {
+    sync::write_tasks(&dir, &text).map(Into::into)
+}
+
+#[tauri::command]
+async fn sync_extras(dir: String) -> Result<Vec<String>, String> {
+    sync::list_extras(&dir)
+}
+
+#[tauri::command]
+async fn sync_read_extra(dir: String, name: String) -> Result<Option<String>, String> {
+    sync::read_extra(&dir, &name)
+}
+
+#[tauri::command]
+async fn sync_remove_extra(dir: String, name: String) -> Result<(), String> {
+    sync::remove_extra(&dir, &name)
+}
+
+#[tauri::command]
+async fn pic_write(dir: String, id: String, data: String) -> Result<(), String> {
+    sync::write_picture(&dir, &id, &data)
+}
+
+#[tauri::command]
+async fn pic_read(dir: String, id: String) -> Result<Option<String>, String> {
+    sync::read_picture(&dir, &id)
+}
+
+#[tauri::command]
+async fn pic_list(dir: String) -> Result<Vec<(String, u64)>, String> {
+    sync::list_pictures(&dir)
+}
+
+#[tauri::command]
+async fn pic_remove(dir: String, id: String) -> Result<(), String> {
+    sync::remove_picture(&dir, &id)
 }
 
 fn toggle_main(app: &AppHandle) {
@@ -72,6 +140,7 @@ pub fn run() {
                 .with_denylist(&["quickadd"])
                 .build(),
         )
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
@@ -92,7 +161,20 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![clickthrough_changed, open_url])
+        .invoke_handler(tauri::generate_handler![
+            clickthrough_changed,
+            open_url,
+            sync_stat,
+            sync_read,
+            sync_write,
+            sync_extras,
+            sync_read_extra,
+            sync_remove_extra,
+            pic_write,
+            pic_read,
+            pic_list,
+            pic_remove
+        ])
         .setup(move |app| {
             // A shortcut another app already owns must not stop Slate Tasks from starting.
             for s in [quick_add, show_hide, click_through] {

@@ -17,7 +17,8 @@ Local only: no account, no tracking, no network.
 - **Calendar.** Pick a date from a Slate-styled month calendar that slides up over the list, or use Today, Tomorrow and Next week.
 - **Drag to reorder.** Rows slide aside as you drag, and glide into place on every reorder, tick and delete.
 - **Pictures on tasks.** Drag an image from Finder onto a task (or paste one with `Cmd V` on a focused task). It is resized to fit 1280×720 (720×1280 for portrait, never enlarged) and shown as a small circle beside the date. Click it for a lightbox; right-click it, or press `Del` in the lightbox, to remove it. Dropping on the Add field makes a new task named after the file. Settings shows how many pictures there are and can remove them all.
-- **About** page in Settings.
+- **Keep your list in a folder.** Settings > Storage > Folder: pick a folder inside Dropbox, iCloud Drive or any synced folder. The list (`slate-tasks.json`) and pictures (`pictures/`) live there, so another computer pointing at the same folder shows the same tasks within a couple of seconds of the sync service delivering them. This Mac keeps its own copy too, so the app works with the folder offline and catches up later. Choose **This Mac** to stay local.
+- **About** page in Settings, with a link to the author's site.
 - Light and dark, following the system.
 
 ### Shortcuts
@@ -89,13 +90,18 @@ src/js/settings.js  settings; click-through is deliberately never saved
 src/js/native.js    the only file that talks to Tauri
 src/js/calendar.js  the month calendar
 src/js/reorder.js   drag to reorder, with rows sliding aside
-src/js/pictures.js  resizing dropped images and keeping them in IndexedDB
+src/js/pictures.js  resizing dropped images and keeping them in IndexedDB (and in the folder)
+src/js/sync.js      folder sync: read, merge, write, watch
+src-tauri/src/sync.rs  the folder file commands (std only, tested on their own)
 src/js/app.js       the list, settings, about and collapsed strip
 src/js/quickadd.js  the quick-add bar
 src-tauri/          window, global shortcuts, menu bar icon, open at login, opening links
 ```
 
 ## Notes
+
+- **How folder sync merges.** Every task carries a position and a last-changed time. When two copies meet, the newest change to each task wins, tasks added on either side are kept, and a deleted task stays deleted unless it was edited (or restored with Undo) afterwards. A computer whose clock runs behind still stamps its edits after everything it has seen. Dropbox's "conflicted copy" files are merged in and removed. A file the app cannot read is never overwritten; sync pauses and the footer says so.
+- Folder sync needs the sync service to deliver files; "realtime" is as fast as that service. Pictures in the folder that no task uses are removed after a day.
 
 - Tasks live in the app's local storage on this Mac. A damaged store is kept aside under a `slate-tasks:v1:backup:` key before anything is overwritten.
 - Opacity uses a transparent window, which on macOS needs Tauri's `macos-private-api`. That rules out the Mac App Store, and does not matter for a downloaded app.

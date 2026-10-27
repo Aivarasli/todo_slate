@@ -69,7 +69,7 @@ function close() {
 function submit() {
   const task = L.createTask({ title: input.value, due: dueISO() });
   if (!task) { if (!input.value.trim()) input.value = ''; return; }
-  const ok = store.save(store.load().concat([task]));
+  const ok = store.save(L.appendTask(store.load(), task));
   if (!ok) { input.setAttribute('aria-invalid', 'true'); input.placeholder = 'Could not save. Try again.'; return; }
   native.emit('tasks-changed', { from: 'quickadd' });
   close();
