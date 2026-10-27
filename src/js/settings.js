@@ -1,3 +1,4 @@
+import { LANG_CODES } from './dates.js';
 // Settings. Click-through is deliberately not stored: the app always starts
 // with clicks working, so it can never launch into a state you cannot get out of.
 export const KEY = 'slate-tasks:settings';
@@ -6,6 +7,7 @@ export const DEFAULTS = Object.freeze({
   onTop: true,
   allWorkspaces: true,
   collapseIdle: false,
+  language: 'lt', // second language for the date line: off, or a code from dates.js
   dimCollapsed: true, // fade the collapsed strip
   dimLevel: 70, // percent of normal opacity while collapsed, 30 to 100
   idleSecs: 10, // seconds without focus before collapsing, 1 to 15
@@ -27,6 +29,7 @@ export function clean(raw) {
     onTop: typeof r.onTop === 'boolean' ? r.onTop : DEFAULTS.onTop,
     allWorkspaces: typeof r.allWorkspaces === 'boolean' ? r.allWorkspaces : DEFAULTS.allWorkspaces,
     collapseIdle: typeof r.collapseIdle === 'boolean' ? r.collapseIdle : DEFAULTS.collapseIdle,
+    language: typeof r.language === 'string' && LANG_CODES.includes(r.language) ? r.language : DEFAULTS.language,
     dimLevel: clampInt(r.dimLevel, MIN_OPACITY, 100, DEFAULTS.dimLevel),
     idleSecs: clampInt(r.idleSecs, 1, 15, DEFAULTS.idleSecs),
     dimCollapsed: typeof r.dimCollapsed === 'boolean' ? r.dimCollapsed : DEFAULTS.dimCollapsed,

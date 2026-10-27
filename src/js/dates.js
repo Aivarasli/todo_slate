@@ -108,7 +108,27 @@ export function datelineEN(d) {
   return `${DOW_FULL[d.getDay()]}, ${d.getDate()} ${MON_FULL[d.getMonth()]}`;
 }
 
-// The Lithuanian date line is part of how Slate speaks: it is always shown.
+// The second line under the title, in a language of your choice (Lithuanian unless changed).
+export const LANGUAGES = Object.freeze([
+  ['lt', 'Lietuvių'], ['lv', 'Latviešu'], ['et', 'Eesti'], ['pl', 'Polski'], ['de', 'Deutsch'], ['fr', 'Français'],
+  ['es', 'Español'], ['it', 'Italiano'], ['pt', 'Português'], ['nl', 'Nederlands'], ['sv', 'Svenska'], ['nb', 'Norsk'],
+  ['da', 'Dansk'], ['fi', 'Suomi'], ['cs', 'Čeština'], ['sk', 'Slovenčina'], ['hu', 'Magyar'], ['ro', 'Română'],
+  ['bg', 'Български'], ['el', 'Ελληνικά'], ['uk', 'Українська'], ['hr', 'Hrvatski'],
+]);
+export const LANG_CODES = ['off', ...LANGUAGES.map(([c]) => c)];
+
 export function datelineLT(d) {
   return `${DOW_LT[d.getDay()]}, ${MON_LT[d.getMonth()]} ${d.getDate()} d.`;
+}
+
+// '' for "off" or when the language is not available on this system.
+export function dateline(d, lang) {
+  if (lang === 'lt') return datelineLT(d);
+  if (!LANG_CODES.includes(lang) || lang === 'off') return '';
+  try {
+    const s = new Intl.DateTimeFormat(lang, { weekday: 'long', day: 'numeric', month: 'long' }).format(d);
+    return s.charAt(0).toLocaleUpperCase(lang) + s.slice(1);
+  } catch {
+    return '';
+  }
 }

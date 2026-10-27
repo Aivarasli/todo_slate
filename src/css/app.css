@@ -189,6 +189,7 @@ body.reordering, body.reordering .row .t { cursor: grabbing; }
 .switch[aria-checked="true"]::after { translate: 18px 0; background: var(--paper); }
 .kbd { border: 1px solid var(--rule-strong); border-radius: 8px; padding: 4px 8px; white-space: nowrap; }
 .range { width: 110px; accent-color: var(--ink); }
+.select { height: 28px; max-width: 150px; padding: 0 8px; border: 1px solid var(--rule-strong); border-radius: 8px; background: var(--paper); color: var(--ink); font: 12px var(--font-sans); cursor: pointer; }
 .set-row.sub { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
 .range-val { min-width: 38px; text-align: right; }
 .seg { display: flex; gap: 6px; }

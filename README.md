@@ -10,7 +10,7 @@ Local only: no account, no tracking, no network.
 - **Opacity** from 30% to 100%, so the list can sit over your work.
 - **Quick add.** `Opt Space` opens a small bar anywhere: type, press Enter, done.
 - **Collapse** to a one-line strip showing your next task, manually or after 10 seconds idle.
-- **Today / Open / All / Done** views, overdue first, with the Lithuanian date line Slate always shows. *Open* hides everything already ticked off. The tab you used last is remembered.
+- **Today / Open / All / Done** views, overdue first, with a second-language date line (Lithuanian by default; 22 European languages or off in Settings). *Open* hides everything already ticked off. The tab you used last is remembered.
 - **Click a task's title to tick it off.** Hovering the title previews the tick. The tick draws in, the title is struck through, and the row slides out of views it no longer belongs in.
 - **Links in a task are clickable.** `https://…`, `www.…`, bare domains like `figma.com/file/…`, and email addresses open in your browser or mail app.
 - **Quick delete:** a small x in a circle sits beside every task's date. Undo brings it back.
@@ -84,7 +84,7 @@ To work on it in a browser without Tauri, run `npm run serve` and open http://lo
 
 ```
 src/js/logic.js     tasks and grouping (pure, tested)
-src/js/dates.js     dates and the Lithuanian date line (pure, tested)
+src/js/dates.js     dates and the second-language date line (pure, tested)
 src/js/store.js     persistence, with a backup when stored data is damaged
 src/js/settings.js  settings; click-through is deliberately never saved
 src/js/native.js    the only file that talks to Tauri
