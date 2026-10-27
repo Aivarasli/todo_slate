@@ -8,6 +8,7 @@ import { native } from './native.js';
 import { createCalendar } from './calendar.js';
 import { wireReorder, isReordering } from './reorder.js';
 import * as P from './pictures.js';
+import { createSync } from './sync.js';
 
 const COLLAPSED = { w: 420, h: 56 };
 const DEFAULT_SIZE = { w: 360, h: 560 };
@@ -22,6 +23,8 @@ const motionOK = () => !(globalThis.matchMedia && globalThis.matchMedia('(prefer
 
 const state = {
   tasks: store.load(),
+  deleted: store.loadDeleted(), // delete markers, so a deletion reaches your other computers
+  sync: { kind: 'off' }, // folder sync status: off | busy | ok | error
   settings: S.load(), // includes the list tab last used (settings.filter)
   mode: 'main', // main | settings | about | collapsed
   today: D.toISO(new Date()),
@@ -93,13 +96,47 @@ const rowFor = (id) => (state.mode === 'main' ? els.scroll.querySelector(`.row[d
 // Saves and shows the new list. `render: false` saves now and leaves drawing to the caller,
 // which is how a row gets to play its exit animation before it disappears.
 function commit(tasks, opts = {}) {
+  state.deleted = L.trackDeleted(state.deleted, state.tasks, tasks);
   state.tasks = tasks;
   if (opts.focusId !== undefined) state.focusId = opts.focusId;
   const ok = store.save(tasks);
+  store.saveDeleted(state.deleted);
   state.saveError = !ok;
   if (ok) native.emit('tasks-changed', { from: 'main' });
+  sync.schedule();
   if (opts.render === false) return;
   render();
+}
+
+// ---------- folder sync ----------
+const sync = createSync({
+  getStore: () => ({ tasks: state.tasks, deleted: state.deleted }),
+  applyStore(m) {
+    state.tasks = m.tasks;
+    state.deleted = m.deleted;
+    store.save(m.tasks);
+    store.saveDeleted(m.deleted);
+    native.emit('tasks-changed', { from: 'main' });
+    if (!busy()) render(); // a row being edited or dragged is never rebuilt under the user
+  },
+  onStatus(st) {
+    const was = state.sync.kind;
+    state.sync = st;
+    paintSyncLine();
+    if ((st.kind === 'error' || was === 'error') && state.mode === 'main') renderFoot();
+  },
+});
+
+const syncText = () => {
+  const s = state.sync;
+  if (s.kind === 'busy') return 'Syncing…';
+  if (s.kind === 'ok') return 'Up to date at ' + new Date(s.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (s.kind === 'error') return `Paused: ${s.message}. Changes are kept on this Mac and sync when the folder is back.`;
+  return '';
+};
+function paintSyncLine() {
+  const el = els.sScroll.querySelector('.sync-line');
+  if (el) { el.textContent = syncText(); el.classList.toggle('bad', state.sync.kind === 'error'); }
 }
 
 function setUndo(prevTasks, text) {
@@ -115,7 +152,7 @@ function undo() {
   state.undo = null;
   state.message = null;
   clearTimeout(undoTimer);
-  commit(prev);
+  commit(L.revive(prev, state.tasks));
 }
 
 // A row collapses away, then the list is drawn again without it. Several rows can leave at once;
@@ -204,7 +241,7 @@ function addFromInput() {
   if (!task) { if (!els.input.value.trim()) els.input.value = ''; return; }
   els.input.value = '';
   if (filter() === 'done') setFilter('today', true);
-  commit(state.tasks.concat([task]));
+  commit(L.appendTask(state.tasks, task));
 }
 
 // ---------- pictures ----------
@@ -230,6 +267,13 @@ async function gc() {
     const used = L.imageIds(state.tasks);
     for (const k of stored) if (!used.has(k)) await P.remove(k);
   } catch { /* storage unavailable: nothing to clean */ }
+  // In the folder, a picture is only removed a day after it stopped being used: another computer may still need it.
+  if (sync.dir) {
+    try {
+      const used = L.imageIds(state.tasks);
+      for (const [id, at] of await P.folderList()) if (!used.has(id) && at < Date.now() - 864e5) await P.folderRemove(id);
+    } catch { /* the folder is away: try next time */ }
+  }
 }
 
 // Resizes and stores the file; resolves with the new picture record or null (after telling the user).
@@ -261,7 +305,7 @@ async function taskFromPicture(file) {
   const task = L.createTask({ title: P.titleFromName(file.name) || 'Picture', due: state.today, img });
   if (filter() === 'done') setFilter('today', true);
   state.picId = task.id;
-  commit(state.tasks.concat([task]), { focusId: task.id });
+  commit(L.appendTask(state.tasks, task), { focusId: task.id });
   startEdit(task.id); // the file name is rarely the title you want: type over it
 }
 
@@ -564,8 +608,10 @@ function renderTitlebar() {
     gap(),
     h('span', { class: 'label center', 'data-tauri-drag-region': true },
       state.clickThrough ? h('span', { class: 'pill on' }, 'Click-through') : `${open} open`),
-    h('button', { class: 'btn', type: 'button', 'aria-pressed': String(state.settings.onTop), onClick: () => saveSettings({ onTop: !state.settings.onTop }) },
-      h('span', { class: 'dot' + (state.settings.onTop ? ' on' : '') }), 'On top'),
+    h('button', {
+      class: 'pin', type: 'button', 'aria-pressed': String(state.settings.onTop), title: 'Keep above other windows',
+      onClick: () => saveSettings({ onTop: !state.settings.onTop }),
+    }, h('span', { class: 'dot' + (state.settings.onTop ? ' on' : '') }), 'On top'),
   );
 }
 
@@ -827,7 +873,9 @@ function renderFoot() {
     ? h('span', { class: 'label' }, 'Could not save. Try again.')
     : state.message
       ? [h('span', { class: 'label' }, state.message), state.undo ? h('button', { class: 'btn quiet', type: 'button', onClick: undo }, 'Undo') : null]
-      : h('span', { class: 'label', style: 'white-space:nowrap' }, 'Opt Space: add');
+      : state.sync.kind === 'error'
+        ? h('button', { class: 'btn quiet warn', type: 'button', onClick: () => openSettings('storage') }, 'Sync paused')
+        : h('span', { class: 'label', style: 'white-space:nowrap' }, 'Opt Space: add');
   clear(els.foot).append(
     ...[left].flat(), h('span', { class: 'grow' }),
     h('button', { class: 'btn quiet', type: 'button', onClick: () => collapse(false) }, 'Collapse'),
@@ -936,6 +984,40 @@ const SHORTCUTS_LIST = [
   ['Show these shortcuts', '?'],
 ];
 
+// Where tasks and pictures are kept: on this Mac only, or in a folder that a service like Dropbox keeps in step.
+async function useFolder(change) {
+  const dir = await native.pickFolder();
+  if (!dir || (!change && dir === state.settings.syncDir)) return;
+  saveSettings({ syncDir: dir }); // the folder is merged with this list, never replaced by it
+  await sync.start(dir);
+}
+
+async function useThisMac() {
+  const dir = state.settings.syncDir;
+  if (!dir) return;
+  saveSettings({ syncDir: null });
+  await sync.start(null);
+  try { await P.pullMissing([...L.imageIds(state.tasks)], dir); } catch { /* pictures not yet fetched stay in the folder */ }
+}
+
+function storageRows() {
+  const dir = state.settings.syncDir;
+  const seg = h('div', { class: 'seg' },
+    h('button', { class: 'btn', type: 'button', 'aria-pressed': String(!dir), onClick: useThisMac }, 'This Mac'),
+    h('button', { class: 'btn', type: 'button', 'aria-pressed': String(!!dir), onClick: () => { if (!dir) useFolder(false); } }, 'Folder'));
+  const rows = [h('div', { class: 'set-row', 'data-section': 'storage' },
+    h('div', { class: 'what' }, h('b', null, 'Storage'),
+      h('span', { class: 'small dim' }, dir ? 'In a folder, for example in Dropbox, so your computers share one list.' : 'On this Mac only. No account, no tracking.')),
+    seg)];
+  if (dir) {
+    rows.push(h('div', { class: 'set-row' },
+      h('div', { class: 'what' }, h('span', { class: 'label' }, 'Folder'), h('span', { class: 'small path' }, dir)),
+      h('button', { class: 'btn', type: 'button', onClick: () => useFolder(true) }, 'Change')));
+    rows.push(h('div', { class: 'set-row' }, h('span', { class: 'small dim sync-line' }, syncText())));
+  }
+  return rows;
+}
+
 function picturesRow() {
   const withPic = state.tasks.filter((t) => t.img);
   const bytes = withPic.reduce((n, t) => n + (t.img.bytes || 0), 0);
@@ -983,7 +1065,7 @@ function renderSettings() {
       h('div', { class: 'set-row' }, h('b', { style: 'font-weight:500' }, 'Theme'),
         h('div', { class: 'seg' }, themeBtn('auto', 'Auto'), themeBtn('light', 'Light'), themeBtn('dark', 'Dark'))),
       picturesRow(),
-      h('div', { class: 'set-row' }, h('div', { class: 'what' }, h('b', null, 'Storage'), h('span', { class: 'small dim' }, 'On this Mac only. No account, no tracking.'))),
+      ...storageRows(),
       h('button', { class: 'set-row nav', type: 'button', onClick: openAbout },
         h('div', { class: 'what' }, h('b', null, 'About Slate Tasks'), h('span', { class: 'small dim' }, `Created by ${AUTHOR}`)),
         h('span', { class: 'chev' }, chevron(1))),
@@ -1110,6 +1192,7 @@ window.addEventListener('blur', () => {
 });
 window.addEventListener('focus', () => {
   clearTimeout(idleTimer);
+  sync.schedule(200);
   if (state.autoCollapsed && state.mode === 'collapsed') expand();
 });
 
@@ -1118,6 +1201,8 @@ const busy = () => !!(state.editingId || state.dateId || state.lightId || isReor
 
 function reloadTasks() {
   state.tasks = store.load();
+  state.deleted = store.loadDeleted();
+  sync.schedule();
   if (busy()) return;
   render();
 }
@@ -1128,6 +1213,7 @@ native.listen('toggle-clickthrough', () => setClickThrough(!state.clickThrough))
 setInterval(() => { if (D.toISO(new Date()) !== state.today && !busy()) render(); }, 30000);
 
 scheduleGc();
+sync.start(state.settings.syncDir);
 S.apply(state.settings);
 native.setOnTop(state.settings.onTop);
 native.setAllWorkspaces(state.settings.allWorkspaces);

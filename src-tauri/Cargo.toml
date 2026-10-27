@@ -19,6 +19,8 @@ tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-pn
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-window-state = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
 
 [profile.release]
 panic = "abort"

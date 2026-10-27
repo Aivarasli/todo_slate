@@ -25,6 +25,13 @@ export const native = {
   hide: () => guard(() => win().hide()),
   emit: (name, payload) => guard(() => T.event.emit(name, payload)),
   invoke: (cmd, args) => guard(() => T.core.invoke(cmd, args)),
+  // Like invoke, but errors reach the caller (folder storage needs to know when something failed).
+  call: (cmd, args) => (T ? T.core.invoke(cmd, args) : Promise.reject(new Error('not in the app'))),
+  // A native folder chooser. Resolves with the path, or null when cancelled.
+  pickFolder: () => guard(async () => {
+    const r = await T.dialog.open({ directory: true, multiple: false, title: 'Choose a folder to keep your tasks in' });
+    return typeof r === 'string' ? r : null;
+  }),
   async listen(name, cb) {
     return guard(() => T.event.listen(name, cb));
   },

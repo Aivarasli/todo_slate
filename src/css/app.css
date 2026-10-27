@@ -21,6 +21,10 @@ input, [contenteditable] { -webkit-user-select: text; user-select: text; }
 .titlebar { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 12px 0 0; border-bottom: 1px solid var(--rule); flex: none; }
 .lights-gap { width: 76px; align-self: stretch; flex: none; }
 .titlebar .center { flex: 1; text-align: center; }
+.pin { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer; font: 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.pin .dot { width: 6px; height: 6px; }
+.pin:hover { border-color: var(--rule); color: var(--ink); }
+.pin[aria-pressed="true"] { color: var(--ink); }
 
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--rule); border-radius: 999px; white-space: nowrap; color: var(--ink-2); background: transparent; }
 .pill.on { border-color: var(--ink); color: var(--ink); }
@@ -204,6 +208,11 @@ body.quick { background: transparent; }
 .bar .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 body.clickthrough .win { cursor: default; }
+
+/* Storage */
+.set-row .path { font: 11px/1.4 var(--font-mono); overflow-wrap: anywhere; color: var(--ink-2); }
+.sync-line.bad { color: var(--ink); }
+.btn.warn { color: var(--ink); border-color: var(--rule-strong); }
 
 /* Pictures: avatar beside the due pill, drop state, lightbox, menu */
 .row .meta { display: flex; align-items: center; gap: 8px; }

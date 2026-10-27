@@ -16,6 +16,8 @@ jobs:
         with:
           node-version: 22
       - run: npm test
+      - name: Folder storage (Rust, std only)
+        run: rustc --edition 2021 --test src-tauri/src/sync.rs -o sync_tests && ./sync_tests
 
   build-macos:
     name: Build macOS app
