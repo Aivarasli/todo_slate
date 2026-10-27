@@ -110,15 +110,20 @@ export function groupOf(t, today) {
   return t.due < today ? 'overdue' : 'later';
 }
 
+export const FILTERS = ['today', 'open', 'all', 'done'];
+
+// today: what is due now or late. open: everything still to do. all: everything. done: finished work.
 export function groupTasks(tasks, filter, today) {
   if (filter === 'done') {
     const d = tasks.filter((t) => t.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     return d.length ? [{ key: 'done', title: GROUP_TITLES.done, tasks: d }] : [];
   }
-  const keys = filter === 'today' ? ['overdue', 'today'] : ['overdue', 'today', 'later', 'nodate'];
+  const keys = filter === 'today' ? ['overdue', 'today'] : filter === 'open' ? ['overdue', 'today', 'later', 'nodate'] : ['overdue', 'today', 'later', 'nodate', 'done'];
+  const pool = filter === 'open' ? tasks.filter((t) => !t.done) : tasks;
   const out = [];
   for (const key of keys) {
-    const items = tasks.filter((t) => groupOf(t, today) === key);
+    let items = pool.filter((t) => groupOf(t, today) === key);
+    if (key === 'done') items = items.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0));
     if (items.length) out.push({ key, title: GROUP_TITLES[key], tasks: items });
   }
   return out;
@@ -128,7 +133,8 @@ export function counts(tasks, today) {
   const open = tasks.filter((t) => !t.done);
   return {
     today: open.filter((t) => t.due && t.due <= today).length,
-    all: open.length,
+    open: open.length,
+    all: tasks.length,
     done: tasks.length - open.length,
   };
 }
@@ -142,4 +148,70 @@ export function nextUp(tasks, today) {
     if (t) return t;
   }
   return tasks.find((t) => !t.done) || null;
+}
+
+// ---------- links ----------
+// Splits a title into plain and link parts: [{ text }, { text, href }].
+// Recognises http(s) links, www. and bare domains with a common ending, and email addresses.
+const TLDS = 'com|org|net|io|dev|app|co|lt|eu|uk|de|fr|nl|se|fi|pl|lv|ee|ca|au|ai|xyz|info|biz|design|studio|site|page|link|ly|tv|ch|cz|dk|ie|be|gr|ro|hu|bg';
+const LINK_RE = new RegExp(
+  String.raw`https?:\/\/[^\s<>"'\x60]+` +
+  String.raw`|[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}` +
+  String.raw`|(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+(?:${TLDS})(?![A-Za-z0-9-])(?::\d{1,5})?(?:[\/?#][^\s<>"'\x60]*)?`,
+  'gi',
+);
+
+// Sentence punctuation after a link is not part of it, and a closing bracket only is when it has an opener.
+function trimLink(s) {
+  for (;;) {
+    const last = s[s.length - 1];
+    if (last && '.,;:!?\'"'.includes(last)) { s = s.slice(0, -1); continue; }
+    const pair = { ')': '(', ']': '[', '}': '{' }[last];
+    if (pair && s.split(last).length > s.split(pair).length) { s = s.slice(0, -1); continue; }
+    return s;
+  }
+}
+
+// The address to open for a link's text, or null when it is not something safe to open.
+export function hrefFor(text) {
+  let href = text;
+  if (/^https?:\/\//i.test(text)) href = text;
+  else if (/^[^\s@\/]+@[^\s@\/]+$/.test(text)) href = 'mailto:' + text;
+  else href = 'https://' + text;
+  try {
+    const u = new URL(href);
+    if (!['http:', 'https:', 'mailto:'].includes(u.protocol)) return null;
+    if (u.protocol !== 'mailto:' && !u.hostname.includes('.')) return null;
+    return href.length <= 2048 ? href : null;
+  } catch {
+    return null;
+  }
+}
+
+export function tokenize(title) {
+  const s = String(title == null ? '' : title);
+  const out = [];
+  let at = 0;
+  const push = (text, href) => { if (text) out.push(href ? { text, href } : { text }); };
+  for (const m of s.matchAll(LINK_RE)) {
+    const raw = m[0];
+    const start = m.index;
+    const isUrl = /^https?:\/\//i.test(raw);
+    const isMail = !isUrl && raw.includes('@');
+    // A bare domain glued to a word ("foo_bar.com", "path/x.com") is not a link.
+    if (!isUrl && !isMail && start > 0 && /[\w@./-]/.test(s[start - 1])) continue;
+    const text = trimLink(raw);
+    const href = text ? hrefFor(text) : null;
+    if (!href) continue;
+    push(s.slice(at, start));
+    push(text, href);
+    at = start + text.length;
+  }
+  push(s.slice(at));
+  return out.length ? out : [{ text: s }];
+}
+
+export function firstLink(title) {
+  const t = tokenize(title).find((x) => x.href);
+  return t ? t.href : null;
 }
