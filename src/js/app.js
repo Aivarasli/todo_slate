@@ -1149,22 +1149,19 @@ function renderAbout() {
 }
 
 // ---------- collapse ----------
-// While collapsed and fading, poll the pointer so hovering works even when the window is not focused.
-let pointerTimer = null;
+// While collapsed and fading, the app side reports whether the pointer is over the window,
+// so hovering works even when the window is not focused.
+let watching = false;
 function watchPointer() {
   const need = native.inTauri && state.mode === 'collapsed' && state.settings.dimCollapsed;
-  const root = document.documentElement;
-  if (!need) {
-    clearInterval(pointerTimer); pointerTimer = null;
-    root.classList.remove('pointer-over');
-    return;
-  }
-  if (pointerTimer) return;
-  pointerTimer = setInterval(async () => {
-    const over = await native.pointerOver();
-    if (over !== undefined) root.classList.toggle('pointer-over', !!over);
-  }, 120);
+  if (need === watching) return;
+  watching = need;
+  if (!need) document.documentElement.classList.remove('pointer-over');
+  native.invoke('watch_pointer', { on: need });
 }
+native.listen('pointer-over', (e) => {
+  if (watching) document.documentElement.classList.toggle('pointer-over', !!e.payload);
+});
 
 let moveTok = 0;
 let moving = false; // the window is part-way through a resize, so its size says nothing about what the user chose
