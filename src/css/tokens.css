@@ -1,0 +1,48 @@
+/* Slate tokens, from the Slate design system. Light is the default; dark follows the system
+   unless the page sets data-theme. Fonts are self-hosted (SIL Open Font License 1.1, see fonts/OFL.txt). */
+@font-face { font-family: "Funnel Display"; src: url(../fonts/funnel-display.woff) format("woff"); font-weight: 300 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Funnel Sans"; src: url(../fonts/funnel-sans.woff) format("woff"); font-weight: 300 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Martian Mono"; src: url(../fonts/martian-mono.woff) format("woff"); font-weight: 100 800; font-style: normal; font-display: swap; }
+
+:root {
+  color-scheme: light;
+  --paper: #ECECE9;
+  --paper-2: #E2E2DE;
+  --rule: #C9C9C4;
+  --rule-strong: #7D7F82;
+  --ink-2: #5B5D60;
+  --ink: #111213;
+
+  --font-display: "Funnel Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Funnel Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Martian Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --radius-tile: 18px;
+  --radius-field: 12px;
+  --radius-pill: 999px;
+  --dur-1: 140ms;
+  --dur-2: 240ms;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #0B0B0C;
+    --paper-2: #161618;
+    --rule: #262729;
+    --rule-strong: #6A6C70;
+    --ink-2: #85878B;
+    --ink: #ECEBE7;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0B0B0C;
+  --paper-2: #161618;
+  --rule: #262729;
+  --rule-strong: #6A6C70;
+  --ink-2: #85878B;
+  --ink: #ECEBE7;
+}
