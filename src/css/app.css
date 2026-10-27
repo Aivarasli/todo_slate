@@ -20,6 +20,12 @@ input, [contenteditable] { -webkit-user-select: text; user-select: text; }
 .view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .titlebar { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 12px 0 0; border-bottom: 1px solid var(--rule); flex: none; }
 .lights-gap { width: 76px; align-self: stretch; flex: none; }
+html[data-os="win"] .lights-gap { width: 6px; }
+html[data-os="win"] .strip .check { margin-left: 8px; }
+.wctl { display: flex; align-items: center; gap: 2px; margin-right: -4px; }
+.wbtn { width: 28px; height: 24px; border: 0; border-radius: 7px; background: none; display: grid; place-items: center; cursor: pointer; color: var(--ink-2); transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.wbtn svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round; }
+.wbtn:hover { background: var(--paper-2); color: var(--ink); }
 .titlebar .center { flex: 1; text-align: center; }
 .pin { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer; font: 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
 .pin .dot { width: 6px; height: 6px; }

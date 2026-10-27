@@ -30,9 +30,31 @@ fn open_url(url: String) -> Result<(), String> {
         return Err("unsupported link".into());
     }
     std::thread::spawn(move || {
-        let _ = std::process::Command::new("open").arg(&url).status();
+        let _ = open_in_default_app(&url);
     });
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn open_in_default_app(url: &str) -> std::io::Result<std::process::ExitStatus> {
+    std::process::Command::new("open").arg(url).status()
+}
+
+// rundll32 takes the address as one argument and never goes through cmd.exe, so `&` or `^` in a link is harmless.
+#[cfg(target_os = "windows")]
+fn open_in_default_app(url: &str) -> std::io::Result<std::process::ExitStatus> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new("rundll32")
+        .arg("url.dll,FileProtocolHandler")
+        .arg(url)
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn open_in_default_app(url: &str) -> std::io::Result<std::process::ExitStatus> {
+    std::process::Command::new("xdg-open").arg(url).status()
 }
 
 // ---------- folder storage (see sync.rs) ----------
@@ -128,9 +150,23 @@ fn toggle_clickthrough(app: &AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let quick_add = Shortcut::new(Some(Modifiers::ALT), Code::Space);
-    let show_hide = Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyT);
-    let click_through = Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyC);
+    // On Windows Alt Space belongs to the window menu and Alt Shift switches keyboard layouts,
+    // so the global keys use Ctrl Alt there.
+    #[cfg(target_os = "windows")]
+    let (quick_add, show_hide, click_through) = {
+        let m = Modifiers::CONTROL | Modifiers::ALT;
+        (
+            Shortcut::new(Some(m), Code::Space),
+            Shortcut::new(Some(m), Code::KeyT),
+            Shortcut::new(Some(m), Code::KeyC),
+        )
+    };
+    #[cfg(not(target_os = "windows"))]
+    let (quick_add, show_hide, click_through) = (
+        Shortcut::new(Some(Modifiers::ALT), Code::Space),
+        Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyT),
+        Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyC),
+    );
 
     tauri::Builder::default()
         // Remember where the window sits. Size is not restored, so a collapsed strip never comes back stuck.
@@ -206,6 +242,7 @@ pub fn run() {
                 });
             // A plain "S_" with no background, drawn as a template image so macOS tints it for
             // light and dark menu bars like every other menu bar app. Falls back to the app icon.
+            #[cfg(target_os = "macos")]
             match tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png")) {
                 Ok(icon) => tray = tray.icon(icon).icon_as_template(true),
                 Err(_) => {
@@ -213,6 +250,11 @@ pub fn run() {
                         tray = tray.icon(icon.clone());
                     }
                 }
+            }
+            // The taskbar tray has no template images: it shows the coloured app icon.
+            #[cfg(not(target_os = "macos"))]
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone()).tooltip("Slate Tasks");
             }
             tray.build(app)?;
 

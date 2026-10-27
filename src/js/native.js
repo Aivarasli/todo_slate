@@ -4,6 +4,11 @@ const T = globalThis.__TAURI__;
 
 export const inTauri = !!T;
 
+// 'win', 'mac' or 'other' (a plain browser while developing). Only labels and window chrome differ.
+const ua = (globalThis.navigator && globalThis.navigator.userAgent) || '';
+export const os = /Windows/i.test(ua) ? 'win' : /Mac/i.test(ua) ? 'mac' : 'other';
+if (globalThis.document && globalThis.document.documentElement) globalThis.document.documentElement.dataset.os = os;
+
 const win = () => T.window.getCurrentWindow();
 
 async function guard(fn) {
@@ -18,6 +23,7 @@ async function guard(fn) {
 
 export const native = {
   inTauri,
+  os,
   setOnTop: (on) => guard(() => win().setAlwaysOnTop(on)),
   setAllWorkspaces: (on) => guard(() => win().setVisibleOnAllWorkspaces(on)),
   setClickThrough: (on) => guard(() => win().setIgnoreCursorEvents(on)),
@@ -36,6 +42,7 @@ export const native = {
       await new Promise((r) => requestAnimationFrame(r));
     }
   },
+  minimize: () => guard(() => win().minimize()),
   hide: () => guard(() => win().hide()),
   emit: (name, payload) => guard(() => T.event.emit(name, payload)),
   invoke: (cmd, args) => guard(() => T.core.invoke(cmd, args)),
