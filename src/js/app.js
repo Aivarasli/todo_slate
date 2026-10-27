@@ -909,7 +909,7 @@ function renderFoot() {
         : WIN ? null // the Windows keys are long; they are listed in Settings
           : h('span', { class: 'label hint', style: 'white-space:nowrap' }, `${KEY_QUICK}: add`);
   clear(els.foot).append(
-    ...[left].flat(), h('span', { class: 'grow' }),
+    ...[left].flat().filter(Boolean), h('span', { class: 'grow' }),
     h('button', { class: 'btn quiet', type: 'button', onClick: () => collapse(false) }, 'Collapse'),
     h('button', { class: 'btn quiet', type: 'button', onClick: () => openSettings() }, 'Settings'),
   );
@@ -1167,15 +1167,21 @@ function watchPointer() {
 }
 
 let moveTok = 0;
+let moving = false; // the window is part-way through a resize, so its size says nothing about what the user chose
 const MOVE_MS = 460;
 const FADE_MS = 160;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Slide the window to a size. Instant when motion is reduced or outside the app.
 async function moveTo(size, tok) {
-  if (!native.inTauri || !motionOK()) return native.resize(size.w, size.h);
-  const from = await native.logicalSize();
-  await native.glide(from, size, MOVE_MS, () => tok === moveTok);
+  moving = true;
+  try {
+    if (!native.inTauri || !motionOK()) return await native.resize(size.w, size.h);
+    const from = await native.logicalSize();
+    await native.glide(from, size, MOVE_MS, () => tok === moveTok);
+  } finally {
+    if (tok === moveTok) moving = false;
+  }
 }
 
 function playIn(el, cls) {
@@ -1188,8 +1194,9 @@ function playIn(el, cls) {
 async function collapse(auto) {
   if (state.mode !== 'main' || state.collapsing) return;
   const tok = ++moveTok;
-  const size = await native.logicalSize();
-  if (size) state.expandedSize = size;
+  // Remember the size to come back to, but never a size caught mid-animation or a strip-sized one.
+  const size = moving ? null : await native.logicalSize();
+  if (size && size.h >= 150 && size.w >= 300) state.expandedSize = size;
   const animate = native.inTauri && motionOK();
   if (animate) {
     // Content fades first, so it is never squeezed while the window shrinks.
