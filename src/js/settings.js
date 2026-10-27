@@ -8,6 +8,7 @@ export const DEFAULTS = Object.freeze({
   collapseIdle: false,
   opacity: 100, // percent, 30 to 100
   theme: 'auto', // auto | light | dark
+  filter: 'today', // the list tab last used: today | open | all | done
 });
 
 export const MIN_OPACITY = 30;
@@ -21,6 +22,7 @@ export function clean(raw) {
     collapseIdle: typeof r.collapseIdle === 'boolean' ? r.collapseIdle : DEFAULTS.collapseIdle,
     opacity: Number.isFinite(op) ? Math.min(100, Math.max(MIN_OPACITY, Math.round(op))) : DEFAULTS.opacity,
     theme: ['auto', 'light', 'dark'].includes(r.theme) ? r.theme : DEFAULTS.theme,
+    filter: ['today', 'open', 'all', 'done'].includes(r.filter) ? r.filter : DEFAULTS.filter,
   };
 }
 

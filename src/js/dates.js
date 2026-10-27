@@ -40,6 +40,34 @@ export function nextMonday(iso) {
   return addDays(iso, add);
 }
 
+// Same day in another month, clamped to the month's last day (31 Jan + 1 month = 28 or 29 Feb).
+export function addMonths(iso, n) {
+  const d = parseISO(iso);
+  if (!d) return null;
+  const day = d.getDate();
+  const first = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  first.setDate(Math.min(day, last));
+  return toISO(first);
+}
+
+// Monday = 0 ... Sunday = 6.
+export function weekdayIndex(iso) {
+  const d = parseISO(iso);
+  return d ? (d.getDay() + 6) % 7 : 0;
+}
+
+// The six weeks (42 days, Monday first) that cover the month containing `iso`.
+export function monthGrid(iso) {
+  const d = parseISO(iso);
+  if (!d) return [];
+  const first = toISO(new Date(d.getFullYear(), d.getMonth(), 1));
+  const start = addDays(first, -weekdayIndex(first));
+  return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+}
+
+export const sameMonth = (a, b) => typeof a === 'string' && typeof b === 'string' && a.slice(0, 7) === b.slice(0, 7);
+
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -56,6 +84,25 @@ export function formatDue(due, today, time) {
   const base = n === 1 ? 'Tomorrow' : (() => { const d = parseISO(due); return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`; })();
   return time ? `${base} ${time}` : base;
 }
+
+// "Thu 29 Oct" and "Thursday 29 October 2026"
+export function shortDate(iso) {
+  const d = parseISO(iso);
+  return d ? `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}` : '';
+}
+export function longDate(iso) {
+  const d = parseISO(iso);
+  return d ? `${DOW_FULL[d.getDay()]} ${d.getDate()} ${MON_FULL[d.getMonth()]} ${d.getFullYear()}` : '';
+}
+
+// "October 2026"
+export function monthLabel(iso) {
+  const d = parseISO(iso);
+  return d ? `${MON_FULL[d.getMonth()]} ${d.getFullYear()}` : '';
+}
+
+// Monday-first two-letter headings for the calendar.
+export const WEEKDAYS_MIN = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
 export function datelineEN(d) {
   return `${DOW_FULL[d.getDay()]}, ${d.getDate()} ${MON_FULL[d.getMonth()]}`;

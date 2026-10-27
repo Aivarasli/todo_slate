@@ -35,6 +35,13 @@ export const native = {
       return { w: Math.round(s.width / f), h: Math.round(s.height / f) };
     });
   },
+  // Links open in the default browser or mail app. Only http(s) and mailto are ever passed on.
+  async openUrl(url) {
+    if (!/^(https?:\/\/|mailto:)/i.test(url)) return;
+    if (!T) { globalThis.open && globalThis.open(url, '_blank', 'noopener,noreferrer'); return; }
+    await guard(() => T.core.invoke('open_url', { url }));
+  },
+  version: () => guard(() => T.app.getVersion()),
   // Open at login, through the autostart plugin's own commands.
   autostartEnabled: () => guard(() => T.core.invoke('plugin:autostart|is_enabled')),
   setAutostart: (on) => guard(() => T.core.invoke(on ? 'plugin:autostart|enable' : 'plugin:autostart|disable')),

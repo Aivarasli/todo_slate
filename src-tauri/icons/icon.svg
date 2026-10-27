@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000">
+<defs>
+<linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#36362f"/><stop offset=".5" stop-color="#1d1d1a"/><stop offset="1" stop-color="#0d0d0c"/></linearGradient>
+<radialGradient id="glow" cx=".5" cy="0" r=".85"><stop offset="0" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+<linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".3" stop-color="#fff" stop-opacity=".05"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<linearGradient id="ink" gradientUnits="userSpaceOnUse" x1="0" y1="470" x2="0" y2="770"><stop offset="0" stop-color="#f8f8f3"/><stop offset="1" stop-color="#cdcdc6"/></linearGradient>
+</defs>
+<rect width="1000" height="1000" rx="230" fill="url(#tile)"/>
+<rect width="1000" height="1000" rx="230" fill="url(#glow)"/>
+<rect x="2" y="2" width="996" height="996" rx="228" fill="none" stroke="url(#rim)" stroke-width="4"/>
+<path fill="url(#ink)" transform="translate(-7.6 741.7) scale(0.7996)" d="M221.1 -186.3Q234.8 -143.2 269.5 -120.1Q304.3 -97.1 358.4 -97.1Q414.9 -97.1 445.1 -116.5Q475.3 -135.9 475.3 -171.8Q475.3 -197.7 451.7 -214.2Q428.1 -230.7 380.7 -236.8L302.7 -247.6Q203.1 -261.7 154.9 -305.7Q106.6 -349.7 106.6 -429Q106.6 -518.5 172.7 -570Q238.8 -621.5 355 -621.5Q474.6 -621.5 542.8 -565.4Q611.1 -509.3 615.5 -406.3H500Q486.9 -455.6 450.1 -481.6Q413.3 -507.5 353.2 -507.5Q293.9 -507.5 261.9 -488Q230 -468.4 230 -432.1Q230 -406.4 253.5 -390Q277 -373.6 324.3 -367.5L402.3 -356.8Q502.9 -342.7 550.7 -298.8Q598.5 -254.9 598.5 -175.6Q598.5 -115.7 569.4 -72.5Q540.3 -29.2 486.7 -6.2Q433.1 16.9 357.8 16.9Q241.7 16.9 176 -36.3Q110.2 -89.5 103.3 -186.3Z"/>
+<rect fill="url(#ink)" x="557.2" y="653.8" width="367.8" height="88.0"/>
+</svg>

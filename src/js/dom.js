@@ -31,3 +31,27 @@ export function checkIcon() {
   svg.append(p);
   return svg;
 }
+
+// A thin chevron: dir -1 points left, 1 points right.
+export function chevron(dir) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(ns, 'path');
+  p.setAttribute('d', dir < 0 ? 'M7.5 2.5 4 6l3.5 3.5' : 'M4.5 2.5 8 6 4.5 9.5');
+  svg.append(p);
+  return svg;
+}
+
+// A small x, for the delete button.
+export function crossIcon() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(ns, 'path');
+  p.setAttribute('d', 'M3.5 3.5 8.5 8.5M8.5 3.5 3.5 8.5');
+  svg.append(p);
+  return svg;
+}

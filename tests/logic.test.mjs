@@ -137,9 +137,11 @@ test('grouping: overdue, today (done stays), later, no date, done tab', () => {
   ];
   const keys = (f) => L.groupTasks(tasks, f, TODAY).map((g) => g.key + ':' + g.tasks.map((t) => t.id).join(','));
   assert.deepEqual(keys('today'), ['overdue:over', 'today:today,todayDone']);
-  assert.deepEqual(keys('all'), ['overdue:over', 'today:today,todayDone', 'later:later', 'nodate:none']);
+  assert.deepEqual(keys('open'), ['overdue:over', 'today:today', 'later:later', 'nodate:none']); // only what is still to do
+  assert.deepEqual(keys('all'), ['overdue:over', 'today:today,todayDone', 'later:later', 'nodate:none', 'done:oldDone']);
   assert.deepEqual(keys('done'), ['done:oldDone,todayDone']); // newest first
-  assert.deepEqual(L.counts(tasks, TODAY), { today: 2, all: 4, done: 2 });
+  assert.deepEqual(L.counts(tasks, TODAY), { today: 2, open: 4, all: 6, done: 2 });
+  assert.deepEqual(L.FILTERS, ['today', 'open', 'all', 'done']);
 });
 
 test('nextUp prefers overdue, then today, then anything open', () => {
@@ -151,6 +153,82 @@ test('nextUp prefers overdue, then today, then anything open', () => {
   assert.equal(L.nextUp([], TODAY), null);
 });
 
+test('open filter never lists a done task, wherever it is dated', () => {
+  const mk = (id, due, done) => ({ id, title: id, due, done, doneAt: done ? 1 : null, time: null });
+  const tasks = [mk('a', TODAY, true), mk('b', '2026-10-01', true), mk('c', null, true), mk('d', TODAY, false)];
+  const ids = L.groupTasks(tasks, 'open', TODAY).flatMap((g) => g.tasks.map((t) => t.id));
+  assert.deepEqual(ids, ['d']);
+  assert.deepEqual(L.groupTasks(tasks.slice(0, 3), 'open', TODAY), []);
+});
+
+// ---- links ----
+const links = (s) => L.tokenize(s).filter((t) => t.href).map((t) => [t.text, t.href]);
+
+test('tokenize finds http links, www, bare domains and email, and keeps the rest as text', () => {
+  assert.deepEqual(links('Send https://example.com/a?b=1 to Nora'), [['https://example.com/a?b=1', 'https://example.com/a?b=1']]);
+  assert.deepEqual(links('See www.slate.lt then call'), [['www.slate.lt', 'https://www.slate.lt']]);
+  assert.deepEqual(links('Review figma.com/file/abc123'), [['figma.com/file/abc123', 'https://figma.com/file/abc123']]);
+  assert.deepEqual(links('Mail nora@studio.com today'), [['nora@studio.com', 'mailto:nora@studio.com']]);
+  const t = L.tokenize('a https://x.com/y b');
+  assert.deepEqual(t.map((x) => x.text).join(''), 'a https://x.com/y b');
+});
+
+test('tokenize leaves sentence punctuation and unbalanced brackets out of the link', () => {
+  assert.deepEqual(links('Look at https://x.com/y.'), [['https://x.com/y', 'https://x.com/y']]);
+  assert.deepEqual(links('(see https://x.com/y)'), [['https://x.com/y', 'https://x.com/y']]);
+  assert.deepEqual(links('https://en.wikipedia.org/wiki/Foo_(bar)'), [['https://en.wikipedia.org/wiki/Foo_(bar)', 'https://en.wikipedia.org/wiki/Foo_(bar)']]);
+  assert.deepEqual(links('Try example.com, then stop'), [['example.com', 'https://example.com']]);
+});
+
+test('tokenize ignores things that are not links', () => {
+  for (const s of ['Reply to Nora about invoice 0142', 'node.js and v2.0 and e.g. nothing', 'foo_bar.com', 'example.community', 'ftp://x.com', 'javascript:alert(1)', 'localhost:3000', '']) {
+    assert.deepEqual(links(s), [], s);
+  }
+  assert.deepEqual(L.tokenize(''), [{ text: '' }]);
+});
+
+test('hrefFor only ever returns web or mail addresses', () => {
+  assert.equal(L.hrefFor('javascript:alert(1)'), null);
+  assert.equal(L.hrefFor('file:///etc/passwd'), null);
+  assert.equal(L.hrefFor('https://a.co'), 'https://a.co');
+  assert.equal(L.hrefFor('a@b.co'), 'mailto:a@b.co');
+});
+
+test('firstLink gives the first link or null', () => {
+  assert.equal(L.firstLink('read slate.lt and figma.com'), 'https://slate.lt');
+  assert.equal(L.firstLink('nothing here'), null);
+});
+
+// ---- calendar dates ----
+test('monthGrid is six Monday-first weeks around the month', () => {
+  const g = D.monthGrid('2026-10-27');
+  assert.equal(g.length, 42);
+  assert.equal(g[0], '2026-09-28'); // Monday before Thu 1 Oct
+  assert.equal(g[3], '2026-10-01');
+  assert.equal(g[33], '2026-10-31');
+  assert.equal(g[41], '2026-11-08');
+  assert.equal(D.monthGrid('2024-01-15')[0], '2024-01-01'); // 1 Jan 2024 is a Monday
+  assert.deepEqual(D.monthGrid('nope'), []);
+});
+
+test('addMonths clamps to the end of a shorter month and crosses years', () => {
+  assert.equal(D.addMonths('2026-01-31', 1), '2026-02-28');
+  assert.equal(D.addMonths('2028-01-31', 1), '2028-02-29');
+  assert.equal(D.addMonths('2026-12-15', 1), '2027-01-15');
+  assert.equal(D.addMonths('2026-01-15', -1), '2025-12-15');
+  assert.equal(D.addMonths('2026-10-27', 12), '2027-10-27');
+});
+
+test('weekday index, month label and date labels', () => {
+  assert.equal(D.weekdayIndex('2026-10-26'), 0); // Monday
+  assert.equal(D.weekdayIndex('2026-11-01'), 6); // Sunday
+  assert.equal(D.monthLabel('2026-10-27'), 'October 2026');
+  assert.equal(D.shortDate('2026-10-29'), 'Thu 29 Oct');
+  assert.equal(D.longDate('2026-10-29'), 'Thursday 29 October 2026');
+  assert.equal(D.sameMonth('2026-10-01', '2026-10-31'), true);
+  assert.equal(D.sameMonth('2026-10-31', '2026-11-01'), false);
+});
+
 // ---- settings ----
 test('settings.clean clamps opacity and rejects bad values', () => {
   assert.equal(S.clean({ opacity: 5 }).opacity, S.MIN_OPACITY);
@@ -160,6 +238,12 @@ test('settings.clean clamps opacity and rejects bad values', () => {
   assert.equal(S.clean({ theme: 'pink' }).theme, 'auto');
   assert.equal(S.clean({ onTop: 'yes' }).onTop, true);
   assert.equal(S.clean(null).onTop, true);
+});
+
+test('the last list tab is remembered, and a bad one falls back to Today', () => {
+  assert.equal(S.clean({ filter: 'open' }).filter, 'open');
+  assert.equal(S.clean({ filter: 'nope' }).filter, 'today');
+  assert.equal(S.clean(null).filter, 'today');
 });
 
 test('click-through is never part of saved settings', () => {

@@ -17,6 +17,21 @@ fn clickthrough_changed(state: State<'_, TrayState>, on: bool) {
     let _ = state.clickthrough.set_checked(on);
 }
 
+// Opens a link from a task in the default browser or mail app. Only web and mail links are
+// accepted, and the address is passed as a single argument, never through a shell.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    let lower = url.to_ascii_lowercase();
+    let allowed = lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:");
+    if !allowed || url.len() > 2048 || url.chars().any(|c| c.is_control()) {
+        return Err("unsupported link".into());
+    }
+    std::thread::spawn(move || {
+        let _ = std::process::Command::new("open").arg(&url).status();
+    });
+    Ok(())
+}
+
 fn toggle_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         if w.is_visible().unwrap_or(false) {
@@ -77,7 +92,7 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![clickthrough_changed])
+        .invoke_handler(tauri::generate_handler![clickthrough_changed, open_url])
         .setup(move |app| {
             // A shortcut another app already owns must not stop Slate Tasks from starting.
             for s in [quick_add, show_hide, click_through] {

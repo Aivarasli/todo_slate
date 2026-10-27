@@ -16,7 +16,7 @@ input, [contenteditable] { -webkit-user-select: text; user-select: text; }
 .grow { flex: 1; min-width: 0; }
 
 /* Window. The page is transparent so opacity shows the desktop through the window. */
-.win { height: 100vh; display: flex; flex-direction: column; background: var(--paper); border: 1px solid var(--rule-strong); border-radius: 14px; overflow: hidden; opacity: var(--win-opacity, 1); }
+.win { position: relative; height: 100vh; display: flex; flex-direction: column; background: var(--paper); border: 1px solid var(--rule-strong); border-radius: 14px; overflow: hidden; opacity: var(--win-opacity, 1); }
 .view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .titlebar { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 12px 0 0; border-bottom: 1px solid var(--rule); flex: none; }
 .lights-gap { width: 76px; align-self: stretch; flex: none; }
@@ -48,37 +48,116 @@ button.pill:hover { border-color: var(--ink); }
 .input::placeholder { color: var(--ink-2); opacity: 1; }
 .input.date { flex: none; min-height: 32px; padding: 0 12px; font: 11px/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
 
-.tabs { display: flex; gap: 6px; padding: 12px 16px 0; flex: none; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 0; flex: none; }
+.tabs .btn { padding: 6px 11px; }
 
 .scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 16px 12px; }
 .group { margin-top: 16px; }
 .group-head { display: flex; align-items: center; gap: 10px; padding: 0 2px 8px; min-height: 24px; }
 
 .tile { background: var(--paper-2); border: 1px solid var(--rule); border-radius: 18px; overflow: hidden; }
-.row { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px 6px 6px; border-bottom: 1px solid var(--rule); transition: background-color var(--dur-1) var(--ease); }
+.row { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; min-height: 44px; padding: 6px 10px 6px 6px; border-bottom: 1px solid var(--rule); transition: background-color var(--dur-1) var(--ease); }
 .row:last-child { border-bottom: 0; }
 .row:hover, .row:focus-within, .row.editing { background: var(--paper); }
 .row:focus-visible { outline-offset: -2px; }
-.row .t { font-size: 15px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; padding: 4px 0; cursor: text; }
-.row.done .t { color: var(--ink-2); text-decoration: line-through; font-weight: 400; }
-.row.dragging { opacity: .45; }
-.row.drop-before { box-shadow: inset 0 2px 0 var(--ink); }
-.row.drop-after { box-shadow: inset 0 -2px 0 var(--ink); }
-.row .edit { grid-column: 2 / 4; min-height: 32px; border-radius: 12px; padding: 0 10px; border: 1px solid var(--ink); background: var(--paper); font: 500 15px/1.3 var(--font-sans); outline: none; }
-.row .acts { position: absolute; right: 8px; top: 50%; translate: 0 -50%; display: none; gap: 6px; background: var(--paper); padding-left: 6px; }
+.row.moving { background: var(--paper-2); z-index: 1; }
+.row.leaving { overflow: hidden; pointer-events: none; }
+
+/* The title. Hovering it previews the tick, clicking it ticks the task. */
+.row .t { justify-self: start; max-width: 100%; font-size: 15px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; padding: 4px 0; cursor: pointer; }
+.row .tx { background: linear-gradient(var(--ink-2), var(--ink-2)) no-repeat 0 62% / 0% 1px; }
+.row.done .tx { color: var(--ink-2); background-size: 100% 1px; }
+.row .t a.link { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: var(--rule-strong); border-radius: 3px; cursor: pointer; transition: text-decoration-color var(--dur-1) var(--ease); }
+.row .t a.link:hover { text-decoration-color: var(--ink); }
+.row:has(.t:hover):not(:has(a:hover)) .check i { border-color: var(--ink); }
+.row:not(.done):has(.t:hover):not(:has(a:hover)) .check svg, .check:not(.on):hover svg { opacity: .4; stroke: var(--ink); }
+.row.done:has(.t:hover):not(:has(a:hover)) .check i { opacity: .55; }
+
+.row.editing .t { display: none; }
+.row .edit { grid-column: 2 / 5; min-height: 32px; border-radius: 12px; padding: 0 10px; border: 1px solid var(--ink); background: var(--paper); font: 500 15px/1.3 var(--font-sans); outline: none; }
+.row .acts { position: absolute; right: 40px; top: 50%; translate: 0 -50%; display: none; gap: 6px; background: var(--paper); padding-left: 6px; }
 .row:hover .acts, .row:focus-within .acts { display: flex; }
 .row.editing .acts { display: none; }
 .acts .btn { min-height: 28px; padding: 4px 10px; }
-.datebar { grid-column: 1 / 4; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 2px 0 6px 38px; }
-.datebar .btn { min-height: 28px; padding: 4px 10px; }
 
+/* Quick delete: a small x in a circle beside the date. Undo is offered afterwards. */
+.x { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--rule); background: none; padding: 0; display: grid; place-items: center; cursor: pointer; color: var(--ink-2); flex: none; transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease); }
+.x svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; }
+.x:hover { border-color: var(--ink); color: var(--ink); }
+.x:active { background: var(--ink); color: var(--paper); }
+.row.editing .x { display: none; }
+
+/* Task bar: dates, calendar, edit and delete */
+.datebar { grid-column: 1 / 5; display: grid; gap: 8px; padding: 2px 0 8px 38px; }
+.datebar .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.datebar .btn { min-height: 28px; padding: 4px 10px; }
+.datebar.enter, .sheet-panel.enter { animation: rise var(--dur-2) var(--ease) both; }
+.sheet-back { animation: fade var(--dur-2) var(--ease) both; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* The calendar sheet: sits over the bottom of the window, with the rest dimmed behind it. */
+:root { --scrim: rgba(17, 18, 19, .26); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --scrim: rgba(0, 0, 0, .55); } }
+:root[data-theme="dark"] { --scrim: rgba(0, 0, 0, .55); }
+.sheet { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; justify-content: flex-end; }
+.sheet-back { position: absolute; inset: 0; background: var(--scrim); }
+.sheet-panel { position: relative; display: grid; gap: 10px; margin: 0 8px 8px; padding: 12px; max-height: calc(100% - 16px); overflow: auto; background: var(--paper); border: 1px solid var(--rule-strong); border-radius: 18px; }
+.sheet-head { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 0 0 0 2px; }
+.sheet-head .label { white-space: nowrap; }
+.sheet-head .btn { min-height: 26px; padding: 2px 8px; }
+.sheet-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sheet .chips .btn { min-height: 28px; padding: 4px 10px; }
+@keyframes rise { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.sheet-panel.enter { animation-name: rise-up; }
+@keyframes rise-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* Calendar */
+.cal { padding: 0; }
+.cal-head { display: flex; align-items: center; gap: 4px; padding: 0 2px 4px; }
+.cal-title { font-size: 15px; font-weight: 500; }
+.cal-today { min-height: 24px; padding: 2px 8px; }
+.cal-nav { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--rule); background: none; display: grid; place-items: center; padding: 0; cursor: pointer; color: var(--ink); transition: border-color var(--dur-1) var(--ease); }
+.cal-nav:hover { border-color: var(--ink); }
+.cal-nav svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.cal-dow, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.cal-dow span { font: 10px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); text-align: center; padding: 6px 0 4px; }
+.cal-grid { row-gap: 2px; }
+.day { width: 100%; max-width: 32px; aspect-ratio: 1; justify-self: center; display: grid; place-items: center; border: 1px solid transparent; border-radius: 50%; background: none; padding: 0; cursor: pointer; font: 12px/1 var(--font-mono); color: var(--ink); transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), scale var(--dur-1) var(--ease); }
+.day:hover { border-color: var(--rule-strong); }
+.day:active { scale: .94; }
+.day.out { color: var(--ink-2); opacity: .5; }
+.day.today { border-color: var(--ink); }
+.day.sel, .day.sel.out { background: var(--ink); border-color: var(--ink); color: var(--paper); opacity: 1; }
+.day:focus-visible { outline-offset: 1px; }
+
+/* Ticking: the circle pops and rings, the tick draws in, the title is struck through left to right. */
 .check { width: 32px; height: 32px; display: grid; place-items: center; background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; flex: none; }
-.check i { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--rule-strong); display: grid; place-items: center; transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.check i { position: relative; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--rule-strong); display: grid; place-items: center; transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease); }
 .check:hover i { border-color: var(--ink); }
 .check.on i { background: var(--ink); border-color: var(--ink); }
 .check svg { width: 12px; height: 12px; opacity: 0; fill: none; stroke: var(--paper-2); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; transition: opacity var(--dur-1) var(--ease); }
 .check.on svg { opacity: 1; }
 .row:hover .check.on svg, .row:focus-within .check.on svg { stroke: var(--paper); }
+
+.check.pop.on i { animation: pop 420ms cubic-bezier(.3, 1.5, .5, 1) both; }
+.check.pop.on i::after { content: ""; position: absolute; inset: -1px; border-radius: 50%; border: 1px solid var(--ink); pointer-events: none; animation: ring 560ms var(--ease) both; }
+.check.pop.on svg path { stroke-dasharray: 14; animation: draw 300ms var(--ease) 110ms both; }
+.row.pop.done { animation: settle 700ms var(--ease) both; }
+.row.pop.done .tx { animation: strike 380ms var(--ease) 90ms both, dim 380ms var(--ease) 90ms both; }
+.row.pop:not(.done) .tx { animation: unstrike 260ms var(--ease) both; }
+@keyframes pop { from { scale: .6; } to { scale: 1; } }
+@keyframes ring { from { transform: scale(1); opacity: .5; } to { transform: scale(2.1); opacity: 0; } }
+@keyframes draw { from { stroke-dashoffset: 14; } to { stroke-dashoffset: 0; } }
+@keyframes strike { from { background-size: 0% 1px; } to { background-size: 100% 1px; } }
+@keyframes unstrike { from { background-size: 100% 1px; } to { background-size: 0% 1px; } }
+@keyframes dim { from { color: var(--ink); } to { color: var(--ink-2); } }
+@keyframes settle { 0% { background-color: var(--paper); } 100% { background-color: transparent; } }
+
+/* Reordering by drag: the others slide aside, the lifted row follows the pointer. */
+.tile.reordering .row:not(.dragging) { transition: transform 220ms var(--ease), background-color var(--dur-1) var(--ease); }
+.row.dragging { z-index: 3; background: var(--paper); outline: 1px solid var(--ink); outline-offset: -1px; scale: 1.01; cursor: grabbing; transition: none; }
+body.reordering, body.reordering .row .t { cursor: grabbing; }
 
 .foot { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 16px; border-top: 1px solid var(--rule); flex: none; }
 .empty { padding: 28px 0 8px; text-align: center; }
@@ -92,6 +171,12 @@ button.pill:hover { border-color: var(--ink); }
 /* Settings */
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 8px 14px; border-bottom: 1px solid var(--rule); }
 .set-row:last-child { border-bottom: 0; }
+.set-row.compact { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
+.set-row.nav { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--rule); text-align: left; cursor: pointer; transition: background-color var(--dur-1) var(--ease); }
+.set-row.nav:last-child { border-bottom: 0; }
+.set-row.nav:hover { background: var(--paper); }
+.set-row .chev svg { width: 12px; height: 12px; fill: none; stroke: var(--ink-2); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.set-row .val { font-weight: 500; text-align: right; }
 .set-row .what { display: grid; gap: 2px; min-width: 0; }
 .set-row .what b { font-weight: 500; }
 .switch { position: relative; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--rule-strong); background: transparent; cursor: pointer; padding: 0; flex: none; transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
@@ -102,6 +187,15 @@ button.pill:hover { border-color: var(--ink); }
 .range { width: 110px; accent-color: var(--ink); }
 .range-val { min-width: 38px; text-align: right; }
 .seg { display: flex; gap: 6px; }
+
+/* About */
+.about { display: grid; justify-items: center; gap: 6px; padding: 20px 8px 16px; text-align: center; }
+.about img { width: 72px; height: 72px; margin-bottom: 8px; }
+.about h1 { font-size: 26px; }
+.about p { margin: 6px 0 0; max-width: 28ch; }
+.about-fine { margin: 12px 4px 0; text-align: center; }
+a.link { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: var(--rule-strong); cursor: pointer; }
+a.link:hover { text-decoration-color: var(--ink); }
 
 /* Quick add window */
 body.quick { background: transparent; }

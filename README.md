@@ -10,22 +10,47 @@ Local only: no account, no tracking, no network.
 - **Opacity** from 30% to 100%, so the list can sit over your work.
 - **Quick add.** `Opt Space` opens a small bar anywhere: type, press Enter, done.
 - **Collapse** to a one-line strip showing your next task, manually or after 10 seconds idle.
-- Today / All / Done views, overdue first, with the Lithuanian date line Slate always shows.
+- **Today / Open / All / Done** views, overdue first, with the Lithuanian date line Slate always shows. *Open* hides everything already ticked off. The tab you used last is remembered.
+- **Click a task's title to tick it off.** Hovering the title previews the tick. The tick draws in, the title is struck through, and the row slides out of views it no longer belongs in.
+- **Links in a task are clickable.** `https://…`, `www.…`, bare domains like `figma.com/file/…`, and email addresses open in your browser or mail app.
+- **Quick delete:** a small x in a circle sits beside every task's date. Undo brings it back.
+- **Calendar.** Pick a date from a Slate-styled month calendar that slides up over the list, or use Today, Tomorrow and Next week.
+- **Drag to reorder.** Rows slide aside as you drag, and glide into place on every reorder, tick and delete.
+- **About** page in Settings.
 - Light and dark, following the system.
 
 ### Shortcuts
 
+Anywhere:
+
 | Keys | Does |
 | --- | --- |
-| `Opt Space` | Quick add, from anywhere |
+| `Opt Space` | Quick add |
 | `Opt Shift T` | Show or hide the list |
 | `Opt Shift C` | Turn click-through on or off |
-| `N` or `/` | Focus the add field |
-| `Space` or `X` on a row | Mark done |
-| `Enter` on a row | Edit the title (or double-click) |
-| `D` on a row | Change the date |
-| `Backspace` on a row | Delete (Cmd Z or Undo brings it back) |
-| `Alt Up / Down` on a row | Move it within its group (or drag) |
+
+In the list:
+
+| Keys | Does |
+| --- | --- |
+| `N`, `A` or `/` | Focus the add field |
+| `1` `2` `3` `4` | Today, Open, All, Done |
+| `[` `]` | Previous or next list |
+| `Up` `Down`, `J` `K` | Move between tasks (`Home` `End` for first and last) |
+| `Space` or `X` | Tick or untick the task |
+| `Enter` or `E` | Edit the title |
+| `Backspace` | Delete (`Cmd Z` or Undo brings it back) |
+| `Alt Up` / `Alt Down` | Move the task within its group |
+| `D` | Open the task bar (dates, edit, delete) |
+| `C` | Open the calendar |
+| `T` `M` `W` | Due today, tomorrow, next Monday |
+| `0` | Clear the date |
+| `O` | Open the first link in the task |
+| `Cmd ,` | Settings |
+| `Cmd .` | Collapse or expand |
+| `?` | Show the shortcuts |
+
+In the calendar: arrows move by day and week, `PageUp` `PageDown` by month (with `Shift`, by year), `Home` `End` to the week's ends, `T` for today, `Enter` to choose, `Esc` to close.
 
 If another app already owns a shortcut, Slate Tasks still starts; that shortcut is just not registered.
 
@@ -59,13 +84,17 @@ src/js/dates.js     dates and the Lithuanian date line (pure, tested)
 src/js/store.js     persistence, with a backup when stored data is damaged
 src/js/settings.js  settings; click-through is deliberately never saved
 src/js/native.js    the only file that talks to Tauri
-src/js/app.js       the list, settings and collapsed strip
+src/js/calendar.js  the month calendar
+src/js/reorder.js   drag to reorder, with rows sliding aside
+src/js/app.js       the list, settings, about and collapsed strip
 src/js/quickadd.js  the quick-add bar
-src-tauri/          window, global shortcuts, menu bar icon, open at login
+src-tauri/          window, global shortcuts, menu bar icon, open at login, opening links
 ```
 
 ## Notes
 
 - Tasks live in the app's local storage on this Mac. A damaged store is kept aside under a `slate-tasks:v1:backup:` key before anything is overwritten.
 - Opacity uses a transparent window, which on macOS needs Tauri's `macos-private-api`. That rules out the Mac App Store, and does not matter for a downloaded app.
+- Links open through a small `open_url` command that only accepts `http`, `https` and `mailto` addresses.
+- The app icon is built from Slate's favicon (`src-tauri/icons/icon.svg`) with a soft top light.
 - Fonts (Funnel Display, Funnel Sans, Martian Mono) are self-hosted under the SIL Open Font License 1.1. See `src/fonts/OFL.txt`.
