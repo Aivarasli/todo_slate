@@ -12,7 +12,6 @@ import { createSync } from './sync.js';
 
 const COLLAPSED = { w: 420, h: 56 };
 const DEFAULT_SIZE = { w: 360, h: 560 };
-const IDLE_MS = 10000;
 const UNDO_MS = 8000;
 const EASE = 'cubic-bezier(.2,.7,.2,1)';
 const AUTHOR = 'Aivaras Ligeika';
@@ -576,6 +575,7 @@ function render() {
   els.about.hidden = state.mode !== 'about';
   els.strip.hidden = state.mode !== 'collapsed';
   document.documentElement.classList.toggle('is-collapsed', state.mode === 'collapsed');
+  watchPointer();
   if (state.mode !== 'main') { state.lightId = null; closeMenu(); }
   if (state.mode === 'main') { renderTitlebar(); renderHead(); renderTabs(); renderList(); renderFoot(); }
   else if (state.mode === 'settings') renderSettings();
@@ -1059,6 +1059,17 @@ function renderSettings() {
     onChange: () => saveSettings({ opacity: Number(slider.value) }),
   });
 
+  // A slider that lives under a switch and saves on release.
+  const subSlider = (id, label, min, max, step, value, fmt, key, on) => {
+    const val = h('span', { class: 'label range-val' }, fmt(value));
+    const input = h('input', {
+      class: 'range', id, type: 'range', min: String(min), max: String(max), step: String(step), value: String(value), 'aria-label': label,
+      onInput: () => { val.textContent = fmt(Number(input.value)); },
+      onChange: () => saveSettings({ [key]: Number(input.value) }),
+    });
+    return h('div', { class: 'set-row sub' }, h('label', { class: 'what', for: id }, h('span', { class: 'small dim' }, label)),
+      h('div', { style: 'display:flex;align-items:center;gap:8px' }, input, val));
+  };
   const themeBtn = (id, label) => h('button', { class: 'btn', type: 'button', 'aria-pressed': String(state.settings.theme === id), onClick: () => saveSettings({ theme: id }) }, label);
   const section = (title, rows, key) => h('section', { class: 'group', 'data-section': key || null },
     h('div', { class: 'group-head' }, h('h2', { class: 'section-label' }, title)),
@@ -1071,8 +1082,10 @@ function renderSettings() {
       switchRow('Show on all desktops', null, state.settings.allWorkspaces, (v) => saveSettings({ allWorkspaces: v })),
       switchRow('Click-through', 'Clicks pass to the windows below. Turn off with Opt Shift C or the menu bar icon.', state.clickThrough, (v) => setClickThrough(v)),
       h('div', { class: 'set-row' }, h('label', { class: 'what', for: 'opacity' }, h('b', null, 'Opacity')), h('div', { style: 'display:flex;align-items:center;gap:8px' }, slider, opVal)),
-      switchRow('Fade when collapsed', 'The strip dims to 70%, and returns to full when the pointer is over it', state.settings.dimCollapsed, (v) => saveSettings({ dimCollapsed: v })),
-      switchRow('Collapse when idle', 'Shrinks to your next task after 10 seconds without focus', state.settings.collapseIdle, (v) => saveSettings({ collapseIdle: v })),
+      switchRow('Fade when collapsed', 'The strip dims, and returns to full when the pointer is over it', state.settings.dimCollapsed, (v) => saveSettings({ dimCollapsed: v })),
+      state.settings.dimCollapsed && subSlider('dim-level', 'Opacity when collapsed', S.MIN_OPACITY, 100, 5, state.settings.dimLevel, (v) => `${v}%`, 'dimLevel'),
+      switchRow('Collapse when idle', 'Shrinks to your next task after a pause without focus', state.settings.collapseIdle, (v) => saveSettings({ collapseIdle: v })),
+      state.settings.collapseIdle && subSlider('idle-secs', 'Wait before collapsing', 1, 15, 1, state.settings.idleSecs, (v) => `${v} s`, 'idleSecs'),
     ]),
     section('Anywhere', SHORTCUTS_GLOBAL.map(([n, k]) => kbd(n, k)), 'shortcuts'),
     section('In the list', SHORTCUTS_LIST.map(([n, k]) => kbd(n, k))),
@@ -1113,6 +1126,23 @@ function renderAbout() {
 }
 
 // ---------- collapse ----------
+// While collapsed and fading, poll the pointer so hovering works even when the window is not focused.
+let pointerTimer = null;
+function watchPointer() {
+  const need = native.inTauri && state.mode === 'collapsed' && state.settings.dimCollapsed;
+  const root = document.documentElement;
+  if (!need) {
+    clearInterval(pointerTimer); pointerTimer = null;
+    root.classList.remove('pointer-over');
+    return;
+  }
+  if (pointerTimer) return;
+  pointerTimer = setInterval(async () => {
+    const over = await native.pointerOver();
+    if (over !== undefined) root.classList.toggle('pointer-over', !!over);
+  }, 120);
+}
+
 let moveTok = 0;
 const MOVE_MS = 460;
 const FADE_MS = 160;
@@ -1241,7 +1271,7 @@ document.addEventListener('auxclick', (e) => { if (e.target.closest && e.target.
 window.addEventListener('blur', () => {
   clearTimeout(idleTimer);
   if (state.settings.collapseIdle && state.mode === 'main' && !state.clickThrough && !state.editingId) {
-    idleTimer = setTimeout(() => collapse(true), IDLE_MS);
+    idleTimer = setTimeout(() => collapse(true), state.settings.idleSecs * 1000);
   }
 });
 window.addEventListener('focus', () => {

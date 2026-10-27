@@ -189,6 +189,7 @@ body.reordering, body.reordering .row .t { cursor: grabbing; }
 .switch[aria-checked="true"]::after { translate: 18px 0; background: var(--paper); }
 .kbd { border: 1px solid var(--rule-strong); border-radius: 8px; padding: 4px 8px; white-space: nowrap; }
 .range { width: 110px; accent-color: var(--ink); }
+.set-row.sub { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
 .range-val { min-width: 38px; text-align: right; }
 .seg { display: flex; gap: 6px; }
 
@@ -261,8 +262,8 @@ body.clickthrough .win { cursor: default; }
   .tabs .btn { padding: 6px 9px; }
 }
 
-html.dim-collapsed.is-collapsed .win { opacity: calc(var(--win-opacity, 1) * .7); }
-html.dim-collapsed.is-collapsed .win:hover { opacity: var(--win-opacity, 1); }
+html.dim-collapsed.is-collapsed .win { opacity: calc(var(--win-opacity, 1) * var(--dim, .7)); }
+html.dim-collapsed.is-collapsed .win:hover, html.dim-collapsed.is-collapsed.pointer-over .win { opacity: var(--win-opacity, 1); }
 .win { transition: opacity 500ms var(--ease); }
 /* Collapsing and expanding. The content fades; the window itself is resized from the app. */
 .win .view { transition: opacity 160ms var(--ease); }
