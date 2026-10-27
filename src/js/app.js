@@ -262,6 +262,7 @@ async function taskFromPicture(file) {
   if (filter() === 'done') setFilter('today', true);
   state.picId = task.id;
   commit(state.tasks.concat([task]), { focusId: task.id });
+  startEdit(task.id); // the file name is rarely the title you want: type over it
 }
 
 function removePicture(id) {
@@ -356,33 +357,39 @@ els.lb.addEventListener('keydown', (e) => {
   }
 });
 
-// Right-click on an avatar: a one-item menu (plus a way to view).
+// Right-click menus: on a picture, and on a task. `items` are { label, key, fn } or 'sep'.
 let menuEl = null;
 function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
-function showMenu(id, x, y) {
+function showMenu(items, x, y, returnId) {
   closeMenu();
-  const item = (label, key, fn) => h('button', { class: 'mi', type: 'button', role: 'menuitem', onClick: () => { closeMenu(); fn(); } }, label, h('span', { class: 'kbd' }, key));
-  const m = h('div', { class: 'menu', role: 'menu', 'aria-label': 'Picture' },
-    item('Remove picture', 'Del', () => removePicture(id)),
-    h('div', { class: 'sep', role: 'separator' }),
-    item('View picture', 'V', () => openPicture(id)));
+  const m = h('div', { class: 'menu', role: 'menu' }, items.map((it) => (it === 'sep'
+    ? h('div', { class: 'sep', role: 'separator' })
+    : h('button', { class: 'mi', type: 'button', role: 'menuitem', onClick: () => { closeMenu(); it.fn(); } }, it.label, it.key ? h('span', { class: 'kbd' }, it.key) : null))));
   m.addEventListener('keydown', (e) => {
-    const items = [...m.querySelectorAll('button')];
-    const i = items.indexOf(document.activeElement);
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); const r = rowFor(id); if (r) r.focus(); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i <= 0 ? items.length : i) - 1].focus(); }
-    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removePicture(id); }
-    else if (e.key === 'v') { e.preventDefault(); closeMenu(); openPicture(id); }
+    const btns = [...m.querySelectorAll('button')];
+    const i = btns.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); const r = returnId && rowFor(returnId); if (r) r.focus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); btns[(i + 1) % btns.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); btns[(i <= 0 ? btns.length : i) - 1].focus(); }
   });
   els.win.append(m);
   const wr = els.win.getBoundingClientRect();
-  const left = Math.max(8, Math.min(x - wr.left, wr.width - m.offsetWidth - 8));
-  const top = Math.max(8, Math.min(y - wr.top, wr.height - m.offsetHeight - 8));
-  m.style.left = `${left}px`;
-  m.style.top = `${top}px`;
+  m.style.left = `${Math.max(8, Math.min(x - wr.left, wr.width - m.offsetWidth - 8))}px`;
+  m.style.top = `${Math.max(8, Math.min(y - wr.top, wr.height - m.offsetHeight - 8))}px`;
   menuEl = m;
   m.querySelector('button').focus();
+}
+const viewItem = (id) => ({ label: 'View picture', key: 'V', fn: () => openPicture(id) });
+const removePicItem = (id) => ({ label: 'Remove picture', key: 'Del', fn: () => removePicture(id) });
+function pictureMenu(id, x, y) { showMenu([removePicItem(id), 'sep', viewItem(id)], x, y, id); }
+function taskMenu(t, g, x, y) {
+  showMenu([
+    { label: 'Rename', key: 'E', fn: () => startEdit(t.id) },
+    { label: 'Set date', key: 'D', fn: () => openBar(t.id, false) },
+    ...(t.img ? ['sep', viewItem(t.id), removePicItem(t.id)] : []),
+    'sep',
+    { label: 'Delete task', key: 'Backspace', fn: () => remove(t.id, g.tasks) },
+  ], x, y, t.id);
 }
 document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target)) closeMenu(); }, true);
 window.addEventListener('blur', closeMenu);
@@ -687,7 +694,7 @@ function rowEl(t, g) {
         'aria-label': 'View picture: ' + t.title, title: 'View picture',
         style: `background-image:url(${t.img.thumb})`,
         onClick: (e) => { e.stopPropagation(); openPicture(t.id); },
-        onContextmenu: (e) => { e.preventDefault(); e.stopPropagation(); showMenu(t.id, e.clientX, e.clientY); },
+        onContextmenu: (e) => { e.preventDefault(); e.stopPropagation(); pictureMenu(t.id, e.clientX, e.clientY); },
       }));
     }
     if (label) {
@@ -711,6 +718,7 @@ function rowEl(t, g) {
   if (state.dateId === t.id && !editing) li.append(dateBar(t, g));
 
   li.addEventListener('keydown', (e) => { if (e.target === li) onRowKey(e, t, g); });
+  if (!editing) li.addEventListener('contextmenu', (e) => { if (e.target.closest('input, .datebar')) return; e.preventDefault(); taskMenu(t, g, e.clientX, e.clientY); });
   if (canDrag) {
     wireReorder(li, {
       scroller: els.scroll,
@@ -783,7 +791,7 @@ function onRowKey(e, t, g) {
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const stop = () => e.preventDefault();
   if (k === ' ' || k === 'x') { stop(); toggle(t.id, true); }
-  else if (k === 'Enter' || k === 'e') { stop(); startEdit(t.id); }
+  else if (k === 'Enter' || k === 'e' || k === 'F2') { stop(); startEdit(t.id); }
   else if (k === 'Backspace' || k === 'Delete') { stop(); remove(t.id, g.tasks); }
   else if (k === 'd') { stop(); state.dateId === t.id ? closeBar(t.id) : openBar(t.id, false); }
   else if (k === 'c') { stop(); openBar(t.id, true); }
@@ -910,7 +918,7 @@ const SHORTCUTS_LIST = [
   ['Move between tasks', 'Up Down, J K'],
   ['First or last task', 'Home End'],
   ['Tick or untick', 'Space X'],
-  ['Edit the title', 'Enter E'],
+  ['Rename (also: right-click a task)', 'Enter E F2'],
   ['Delete', 'Backspace'],
   ['Move the task up or down', 'Alt Up Down'],
   ['Set a date', 'D'],
@@ -1043,6 +1051,12 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.defaultPrevented) return; // a row or the calendar already took this key
+  if (state.lightId) { // focus can slip out of the lightbox (a click on the picture); keys still reach it
+    if (e.key === 'Escape') { e.preventDefault(); closePicture(); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removePicture(state.lightId); }
+    return;
+  }
+  if (menuEl && e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }
   if (isTyping(e.target)) return;
   if (e.metaKey && !e.shiftKey && e.key === 'z' && state.undo) { e.preventDefault(); undo(); return; }
   if (meta || e.altKey) return;
