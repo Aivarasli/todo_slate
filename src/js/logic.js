@@ -95,7 +95,16 @@ export function appendTask(tasks, task) {
 }
 
 // Every change stamps the task with a time that is always later than its last one, so the newest edit wins when lists merge.
-const stamp = (t, now) => Math.max(now, (t.updatedAt || 0) + 1);
+// `floor` is the latest time seen on any task, including ones that came from another computer. A computer whose
+// clock runs behind still stamps its edits after everything it has seen, so a skewed clock cannot make a new edit lose.
+let floor = 0;
+export const observeClock = (tasks) => { for (const t of tasks) if (t.updatedAt > floor) floor = t.updatedAt; };
+export const resetClock = () => { floor = 0; };
+const stamp = (t, now, other = 0) => {
+  const v = Math.max(now, floor + 1, (t.updatedAt || 0) + 1, other + 1);
+  floor = v;
+  return v;
+};
 const mapTask = (tasks, id, fn, now = Date.now()) => tasks.map((t) => (t.id === id ? { ...fn(t), updatedAt: stamp(t, now) } : t));
 
 export function toggleDone(tasks, id, now = Date.now()) {
@@ -205,10 +214,16 @@ export function trackDeleted(deleted, prevTasks, nextTasks, now = Date.now()) {
   return changed ? out : deleted;
 }
 
-// Tasks brought back by Undo get a fresh time, so they beat the delete marker on every machine.
+// Undo puts the earlier tasks back with a fresh time, so they beat the newer copies and delete markers on every machine.
+// Any task that differs from the current list is stamped, not only deleted ones: otherwise the newer copy
+// already in the folder would simply win again and the undo would not stick.
 export function revive(prevTasks, currentTasks, now = Date.now()) {
-  const have = new Set(currentTasks.map((t) => t.id));
-  return prevTasks.map((t) => (have.has(t.id) ? t : { ...t, updatedAt: stamp(t, now) }));
+  const cur = new Map(currentTasks.map((t) => [t.id, t]));
+  return prevTasks.map((t) => {
+    const c = cur.get(t.id);
+    if (c && JSON.stringify(c) === JSON.stringify(t)) return t;
+    return { ...t, updatedAt: stamp(t, now, c ? c.updatedAt : 0) };
+  });
 }
 
 export const GROUP_TITLES = { overdue: 'Overdue', today: 'Today', later: 'Later', nodate: 'No date', done: 'Done' };

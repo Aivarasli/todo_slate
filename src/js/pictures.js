@@ -5,6 +5,7 @@ import { native } from './native.js';
 
 export const MAX_W = 1280;
 export const MAX_H = 720;
+export const MAX_PIXELS = 100e6;
 export const MAX_INPUT = 40 * 1024 * 1024; // refuse files larger than this before decoding
 const QUALITY = 0.8;
 const THUMB = 96;
@@ -75,6 +76,7 @@ export async function prepare(file) {
   try { pic = await decode(file); } catch { throw new Error('decode'); }
   try {
     if (!(pic.w > 0 && pic.h > 0)) throw new Error('decode');
+    if (pic.w * pic.h > MAX_PIXELS) throw new Error('large'); // a decoded 100-megapixel picture needs hundreds of MB
     const { w, h } = fitSize(pic.w, pic.h);
     const bg = paperColour();
     const full = document.createElement('canvas');

@@ -18,6 +18,7 @@ const EASE = 'cubic-bezier(.2,.7,.2,1)';
 const AUTHOR = 'Aivaras Ligeika';
 const COPYRIGHT = `© 2026 ${AUTHOR}`;
 const REPO = 'https://github.com/Aivarasli/todo_slate';
+const SITE = 'https://aivarasligeika.com';
 
 const motionOK = () => !(globalThis.matchMedia && globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -90,6 +91,8 @@ els.win = h('div', { class: 'win' }, els.main, els.settings, els.about, els.stri
 document.getElementById('root').append(els.win);
 
 const filter = () => state.settings.filter;
+const DONE_SHOWN = 120; // finished tasks drawn at once; the rest sit behind "Show older"
+let showAllDone = false;
 const rowFor = (id) => (state.mode === 'main' ? els.scroll.querySelector(`.row[data-id="${CSS.escape(id)}"]`) : null);
 
 // ---------- state changes ----------
@@ -112,6 +115,7 @@ function commit(tasks, opts = {}) {
 const sync = createSync({
   getStore: () => ({ tasks: state.tasks, deleted: state.deleted }),
   applyStore(m) {
+    L.observeClock(m.tasks);
     state.tasks = m.tasks;
     state.deleted = m.deleted;
     store.save(m.tasks);
@@ -254,7 +258,7 @@ function flash(text, ms = 4500) {
   if (state.mode === 'main') renderFoot();
 }
 
-const FAIL = { large: 'That picture is over 40 MB.', decode: 'Could not read that picture.' };
+const FAIL = { large: 'That picture is too large.', decode: 'Could not read that picture.' };
 
 // Stored files that no task points to any more are deleted, once the undo window has passed
 // (undoing a delete needs the file back).
@@ -349,6 +353,7 @@ function closePicture() {
   if (!state.lightId) return;
   state.focusId = state.lightId;
   state.lightId = null;
+  state.lightSrc = null; // let go of the large picture
   render();
 }
 
@@ -643,6 +648,8 @@ function snapshot() {
   for (const el of els.scroll.querySelectorAll('[data-flip]')) {
     m.set(el.dataset.flip, { top: el.getBoundingClientRect().top, group: el.dataset.group || '' });
   }
+  const sr = els.scroll.getBoundingClientRect();
+  m.view = [sr.top, sr.bottom];
   return m;
 }
 
@@ -650,14 +657,18 @@ function playFlip(prev) {
   if (!prev || !motionOK()) return;
   const moved = [];
   const entering = [];
+  // Only rows on (or near) the screen are animated: with hundreds of tasks, animating the rest costs a lot and nobody sees it.
+  const [vt, vb] = prev.view || [-Infinity, Infinity];
+  const near = (top) => top > vt - 120 && top < vb + 120;
   for (const el of els.scroll.querySelectorAll('[data-flip]')) {
     const key = el.dataset.flip;
     const isRow = key[0] === 'r';
     const old = prev.get(key);
-    if (!old) { if (isRow) entering.push(el); continue; }
+    if (!old) { if (isRow && entering.length < 40) entering.push(el); continue; }
     if (isRow && old.group !== el.dataset.group) { entering.push(el); continue; } // changed tile: fade in rather than slide across
-    const dy = old.top - el.getBoundingClientRect().top;
-    if (Math.abs(dy) >= 1) moved.push([el, dy, isRow]);
+    const top = el.getBoundingClientRect().top;
+    const dy = old.top - top;
+    if (Math.abs(dy) >= 1 && (near(old.top) || near(top))) moved.push([el, dy, isRow]);
   }
   for (const [el, dy, isRow] of moved) {
     const a = el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: Math.round(Math.min(440, 220 + Math.abs(dy) * 0.5)), easing: EASE });
@@ -690,7 +701,10 @@ function renderList() {
         h('span', { class: 'label' }, String(n)),
         h('span', { class: 'grow' }),
         g.key === 'done' ? h('button', { class: 'btn quiet', type: 'button', onClick: clearDone }, 'Clear') : null),
-      h('ul', { class: 'tile' }, g.tasks.map((t) => rowEl(t, g)))));
+      h('ul', { class: 'tile' }, (g.key === 'done' && !showAllDone ? g.tasks.slice(0, DONE_SHOWN) : g.tasks).map((t) => rowEl(t, g))),
+      g.key === 'done' && !showAllDone && g.tasks.length > DONE_SHOWN
+        ? h('button', { class: 'btn quiet more', type: 'button', onClick: () => { showAllDone = true; skipFlip = true; renderList(); } }, `Show ${g.tasks.length - DONE_SHOWN} older`)
+        : null));
   }
   playFlip(prev);
 }
@@ -875,7 +889,7 @@ function renderFoot() {
       ? [h('span', { class: 'label' }, state.message), state.undo ? h('button', { class: 'btn quiet', type: 'button', onClick: undo }, 'Undo') : null]
       : state.sync.kind === 'error'
         ? h('button', { class: 'btn quiet warn', type: 'button', onClick: () => openSettings('storage') }, 'Sync paused')
-        : h('span', { class: 'label', style: 'white-space:nowrap' }, 'Opt Space: add');
+        : h('span', { class: 'label hint', style: 'white-space:nowrap' }, 'Opt Space: add');
   clear(els.foot).append(
     ...[left].flat(), h('span', { class: 'grow' }),
     h('button', { class: 'btn quiet', type: 'button', onClick: () => collapse(false) }, 'Collapse'),
@@ -1005,9 +1019,9 @@ function storageRows() {
   const seg = h('div', { class: 'seg' },
     h('button', { class: 'btn', type: 'button', 'aria-pressed': String(!dir), onClick: useThisMac }, 'This Mac'),
     h('button', { class: 'btn', type: 'button', 'aria-pressed': String(!!dir), onClick: () => { if (!dir) useFolder(false); } }, 'Folder'));
-  const rows = [h('div', { class: 'set-row', 'data-section': 'storage' },
+  const rows = [h('div', { class: 'set-row stack', 'data-section': 'storage' },
     h('div', { class: 'what' }, h('b', null, 'Storage'),
-      h('span', { class: 'small dim' }, dir ? 'In a folder, for example in Dropbox, so your computers share one list.' : 'On this Mac only. No account, no tracking.')),
+      h('span', { class: 'small dim' }, dir ? 'In a folder, for example in Dropbox, so your computers share one list.' : 'On this Mac only. No account, no tracking. Choose a folder to share one list between computers.')),
     seg)];
   if (dir) {
     rows.push(h('div', { class: 'set-row' },
@@ -1087,7 +1101,7 @@ function renderAbout() {
       state.version ? h('span', { class: 'label' }, `Version ${state.version}`) : null,
       h('p', { class: 'small dim' }, 'A quiet, always-on-top to-do list for Mac, in the look of Slate.')),
     h('section', { class: 'group' }, h('div', { class: 'tile' }, [
-      fact('Created by', AUTHOR),
+      fact('Created by', h('a', { class: 'link', href: SITE, title: SITE }, AUTHOR)),
       fact('Copyright', COPYRIGHT),
       fact('Source', h('a', { class: 'link', href: REPO }, 'github.com/Aivarasli/todo_slate')),
     ])),
@@ -1201,6 +1215,7 @@ const busy = () => !!(state.editingId || state.dateId || state.lightId || isReor
 
 function reloadTasks() {
   state.tasks = store.load();
+  L.observeClock(state.tasks);
   state.deleted = store.loadDeleted();
   sync.schedule();
   if (busy()) return;
@@ -1212,6 +1227,7 @@ native.listen('toggle-clickthrough', () => setClickThrough(!state.clickThrough))
 
 setInterval(() => { if (D.toISO(new Date()) !== state.today && !busy()) render(); }, 30000);
 
+L.observeClock(state.tasks);
 scheduleGc();
 sync.start(state.settings.syncDir);
 S.apply(state.settings);

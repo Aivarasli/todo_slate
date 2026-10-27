@@ -101,3 +101,25 @@ test('sameTasks compares by value', () => {
   assert.ok(!L.sameTasks([mk('a')], [mk('a', { title: 'z' })]));
   assert.ok(!L.sameTasks([mk('a')], []));
 });
+
+test('undo stamps every task it restores, so it beats the newer copy in the folder', () => {
+  L.resetClock();
+  const before = [mk('1', { done: false, updatedAt: 100 }), mk('2', { updatedAt: 100 })];
+  const ticked = L.toggleDone(before, '1', 150);
+  assert.ok(ticked[0].updatedAt >= 150);
+  const undone = L.revive(before, ticked, 200);
+  assert.equal(undone[0].done, false);
+  assert.ok(undone[0].updatedAt > ticked[0].updatedAt);
+  assert.equal(undone[1], before[1]); // unchanged tasks are left alone
+  const merged = L.mergeStores({ tasks: undone, deleted: {} }, { tasks: ticked, deleted: {} }, 300);
+  assert.equal(merged.tasks[0].done, false); // the undo wins
+});
+
+test('a clock running behind still stamps later than what it has seen', () => {
+  L.resetClock();
+  const future = Date.now() + 3 * 3600e3;
+  L.observeClock([mk('x', { updatedAt: future })]);
+  const t = L.renameTask([mk('1', { updatedAt: 5 })], '1', 'new', Date.now());
+  assert.ok(t[0].updatedAt > future);
+  L.resetClock();
+});
