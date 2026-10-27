@@ -204,8 +204,15 @@ pub fn run() {
                     "clickthrough" => toggle_clickthrough(app),
                     _ => {}
                 });
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
+            // A plain "S_" with no background, drawn as a template image so macOS tints it for
+            // light and dark menu bars like every other menu bar app. Falls back to the app icon.
+            match tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png")) {
+                Ok(icon) => tray = tray.icon(icon).icon_as_template(true),
+                Err(_) => {
+                    if let Some(icon) = app.default_window_icon() {
+                        tray = tray.icon(icon.clone());
+                    }
+                }
             }
             tray.build(app)?;
 
