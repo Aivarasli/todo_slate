@@ -1,6 +1,10 @@
 mod sync;
 
 use serde::Serialize;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
@@ -13,6 +17,14 @@ use tauri_plugin_window_state::StateFlags;
 /// Keeps the tray's "Click-through" tick in step with the window, whichever way it was toggled.
 struct TrayState {
     clickthrough: CheckMenuItem<tauri::Wry>,
+}
+
+/// Whether the list window should report when the pointer is over it (only the collapsed strip needs this).
+struct PointerWatch(Arc<AtomicBool>);
+
+#[tauri::command]
+fn watch_pointer(state: State<'_, PointerWatch>, on: bool) {
+    state.0.store(on, Ordering::Relaxed);
 }
 
 #[tauri::command]
@@ -199,6 +211,7 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             clickthrough_changed,
+            watch_pointer,
             open_url,
             sync_stat,
             sync_read,
@@ -257,6 +270,36 @@ pub fn run() {
                 tray = tray.icon(icon.clone()).tooltip("Slate Tasks");
             }
             tray.build(app)?;
+
+            // A window that is not focused gets no hover events from its webview, so the strip's
+            // "full opacity under the pointer" is decided here, by asking the system where the pointer is.
+            let watching = Arc::new(AtomicBool::new(false));
+            app.manage(PointerWatch(watching.clone()));
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let mut last: Option<bool> = None;
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    if !watching.load(Ordering::Relaxed) {
+                        last = None;
+                        continue;
+                    }
+                    let over = (|| {
+                        let w = handle.get_webview_window("main")?;
+                        let c = handle.cursor_position().ok()?;
+                        let p = w.outer_position().ok()?;
+                        let s = w.outer_size().ok()?;
+                        let (x, y) = (p.x as f64, p.y as f64);
+                        Some(c.x >= x && c.x < x + s.width as f64 && c.y >= y && c.y < y + s.height as f64)
+                    })();
+                    if let Some(o) = over {
+                        if last != Some(o) {
+                            last = Some(o);
+                            let _ = handle.emit_to("main", "pointer-over", o);
+                        }
+                    }
+                }
+            });
 
             app.manage(TrayState {
                 clickthrough: click_item,

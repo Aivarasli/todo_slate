@@ -56,15 +56,6 @@ export const native = {
   async listen(name, cb) {
     return guard(() => T.event.listen(name, cb));
   },
-  // Whether the pointer is over this window. A window that is not focused may not get hover
-  // events from the webview, so the strip asks the system instead.
-  async pointerOver() {
-    return guard(async () => {
-      const w = win();
-      const [c, p, s] = await Promise.all([w.cursorPosition(), w.outerPosition(), w.outerSize()]);
-      return c.x >= p.x && c.x < p.x + s.width && c.y >= p.y && c.y < p.y + s.height;
-    });
-  },
   async logicalSize() {
     return guard(async () => {
       const s = await win().innerSize();
