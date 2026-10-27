@@ -55,3 +55,15 @@ export function crossIcon() {
   svg.append(p);
   return svg;
 }
+
+// A short dash, for the Windows minimize button.
+export function minusIcon() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(ns, 'path');
+  p.setAttribute('d', 'M3 6h6');
+  svg.append(p);
+  return svg;
+}

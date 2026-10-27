@@ -1,10 +1,10 @@
 // The main window: list, settings, about and the collapsed strip.
-import { h, clear, checkIcon, chevron, crossIcon } from './dom.js';
+import { h, clear, checkIcon, chevron, crossIcon, minusIcon } from './dom.js';
 import * as D from './dates.js';
 import * as L from './logic.js';
 import * as store from './store.js';
 import * as S from './settings.js';
-import { native } from './native.js';
+import { native, os } from './native.js';
 import { createCalendar } from './calendar.js';
 import { wireReorder, isReordering } from './reorder.js';
 import * as P from './pictures.js';
@@ -134,7 +134,7 @@ const syncText = () => {
   const s = state.sync;
   if (s.kind === 'busy') return 'Syncing…';
   if (s.kind === 'ok') return 'Up to date at ' + new Date(s.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (s.kind === 'error') return `Paused: ${s.message}. Changes are kept on this Mac and sync when the folder is back.`;
+  if (s.kind === 'error') return `Paused: ${s.message}. Changes are kept on ${HOST} and sync when the folder is back.`;
   return '';
 };
 function paintSyncLine() {
@@ -606,6 +606,21 @@ function applyFocus() {
   state.focusFallback = null;
 }
 
+const WIN = os === 'win';
+const MOD = WIN ? 'Ctrl' : 'Cmd'; // the main modifier key as people read it on this system
+const HOST = WIN ? 'this PC' : 'this Mac';
+const KEY_QUICK = WIN ? 'Ctrl Alt Space' : 'Opt Space';
+const KEY_HIDE = WIN ? 'Ctrl Alt T' : 'Opt Shift T';
+const KEY_CLICK = WIN ? 'Ctrl Alt C' : 'Opt Shift C';
+
+// Windows has no traffic lights and the system title bar is hidden, so the window gets its own two buttons.
+function winControls() {
+  if (!WIN) return null;
+  return h('div', { class: 'wctl' },
+    h('button', { class: 'wbtn', type: 'button', title: 'Minimize', 'aria-label': 'Minimize', onClick: () => native.minimize() }, minusIcon()),
+    h('button', { class: 'wbtn close', type: 'button', title: 'Hide to the tray', 'aria-label': 'Hide to the tray', onClick: () => native.hide() }, crossIcon()));
+}
+
 function gap() { return h('div', { class: 'lights-gap', 'data-tauri-drag-region': true }); }
 
 function renderTitlebar() {
@@ -618,6 +633,7 @@ function renderTitlebar() {
       class: 'pin', type: 'button', 'aria-pressed': String(state.settings.onTop), title: 'Keep above other windows',
       onClick: () => saveSettings({ onTop: !state.settings.onTop }),
     }, h('span', { class: 'dot' + (state.settings.onTop ? ' on' : '') }), 'On top'),
+    winControls(),
   );
 }
 
@@ -890,7 +906,8 @@ function renderFoot() {
       ? [h('span', { class: 'label' }, state.message), state.undo ? h('button', { class: 'btn quiet', type: 'button', onClick: undo }, 'Undo') : null]
       : state.sync.kind === 'error'
         ? h('button', { class: 'btn quiet warn', type: 'button', onClick: () => openSettings('storage') }, 'Sync paused')
-        : h('span', { class: 'label hint', style: 'white-space:nowrap' }, 'Opt Space: add');
+        : WIN ? null // the Windows keys are long; they are listed in Settings
+          : h('span', { class: 'label hint', style: 'white-space:nowrap' }, `${KEY_QUICK}: add`);
   clear(els.foot).append(
     ...[left].flat(), h('span', { class: 'grow' }),
     h('button', { class: 'btn quiet', type: 'button', onClick: () => collapse(false) }, 'Collapse'),
@@ -970,9 +987,9 @@ function switchRow(label, desc, checked, onToggle) {
 
 // Keys that work anywhere, and keys that work in the list. Shown in Settings.
 const SHORTCUTS_GLOBAL = [
-  ['Quick add', 'Opt Space'],
-  ['Show or hide', 'Opt Shift T'],
-  ['Click-through', 'Opt Shift C'],
+  ['Quick add', KEY_QUICK],
+  ['Show or hide', KEY_HIDE],
+  ['Click-through', KEY_CLICK],
 ];
 const SHORTCUTS_LIST = [
   ['Add a task', 'N or /'],
@@ -992,10 +1009,10 @@ const SHORTCUTS_LIST = [
   ['Clear the date', '0'],
   ['Open a link in the task', 'O'],
   ['View the picture', 'V'],
-  ['Paste a picture onto the task', 'Cmd V'],
-  ['Undo', 'Cmd Z'],
-  ['Settings', 'Cmd ,'],
-  ['Collapse or expand', 'Cmd .'],
+  ['Paste a picture onto the task', `${MOD} V`],
+  ['Undo', `${MOD} Z`],
+  ['Settings', `${MOD} ,`],
+  ['Collapse or expand', `${MOD} .`],
   ['Show these shortcuts', '?'],
 ];
 
@@ -1018,11 +1035,11 @@ async function useThisMac() {
 function storageRows() {
   const dir = state.settings.syncDir;
   const seg = h('div', { class: 'seg' },
-    h('button', { class: 'btn', type: 'button', 'aria-pressed': String(!dir), onClick: useThisMac }, 'This Mac'),
+    h('button', { class: 'btn', type: 'button', 'aria-pressed': String(!dir), onClick: useThisMac }, (WIN ? 'This PC' : 'This Mac')),
     h('button', { class: 'btn', type: 'button', 'aria-pressed': String(!!dir), onClick: () => { if (!dir) useFolder(false); } }, 'Folder'));
   const rows = [h('div', { class: 'set-row stack', 'data-section': 'storage' },
     h('div', { class: 'what' }, h('b', null, 'Storage'),
-      h('span', { class: 'small dim' }, dir ? 'In a folder, for example in Dropbox, so your computers share one list.' : 'On this Mac only. No account, no tracking. Choose a folder to share one list between computers.')),
+      h('span', { class: 'small dim' }, dir ? 'In a folder, for example in Dropbox, so your computers share one list.' : `On ${HOST} only. No account, no tracking. Choose a folder to share one list between computers.`)),
     seg)];
   if (dir) {
     rows.push(h('div', { class: 'set-row' },
@@ -1046,7 +1063,8 @@ function renderSettings() {
   clear(els.sTitlebar).append(
     gap(),
     h('span', { class: 'label center', 'data-tauri-drag-region': true }, 'Settings'),
-    h('button', { class: 'btn quiet', type: 'button', onClick: leaveSettings }, 'Done'));
+    h('button', { class: 'btn quiet', type: 'button', onClick: leaveSettings }, 'Done'),
+    winControls());
 
   const opVal = h('span', { class: 'label range-val' }, `${state.settings.opacity}%`);
   const slider = h('input', {
@@ -1080,7 +1098,7 @@ function renderSettings() {
     section('Window', [
       switchRow('Keep on top', 'Stays above other windows', state.settings.onTop, (v) => saveSettings({ onTop: v })),
       switchRow('Show on all desktops', null, state.settings.allWorkspaces, (v) => saveSettings({ allWorkspaces: v })),
-      switchRow('Click-through', 'Clicks pass to the windows below. Turn off with Opt Shift C or the menu bar icon.', state.clickThrough, (v) => setClickThrough(v)),
+      switchRow('Click-through', `Clicks pass to the windows below. Turn off with ${KEY_CLICK} or the ${WIN ? 'tray' : 'menu bar'} icon.`, state.clickThrough, (v) => setClickThrough(v)),
       h('div', { class: 'set-row' }, h('label', { class: 'what', for: 'opacity' }, h('b', null, 'Opacity')), h('div', { style: 'display:flex;align-items:center;gap:8px' }, slider, opVal)),
       switchRow('Fade when collapsed', 'The strip dims, and returns to full when the pointer is over it', state.settings.dimCollapsed, (v) => saveSettings({ dimCollapsed: v })),
       state.settings.dimCollapsed && subSlider('dim-level', 'Opacity when collapsed', S.MIN_OPACITY, 100, 5, state.settings.dimLevel, (v) => `${v}%`, 'dimLevel'),
@@ -1110,7 +1128,8 @@ function renderAbout() {
   clear(els.aTitlebar).append(
     gap(),
     h('span', { class: 'label center', 'data-tauri-drag-region': true }, 'About'),
-    h('button', { class: 'btn quiet', type: 'button', onClick: () => openSettings() }, 'Back'));
+    h('button', { class: 'btn quiet', type: 'button', onClick: () => openSettings() }, 'Back'),
+    winControls());
 
   const fact = (name, value) => h('div', { class: 'set-row' }, h('span', { class: 'label' }, name), h('span', { class: 'val' }, value));
   clear(els.aScroll).append(
@@ -1118,13 +1137,13 @@ function renderAbout() {
       h('img', { src: 'favicon.svg', alt: '', width: '72', height: '72' }),
       h('h1', null, 'Slate Tasks'),
       state.version ? h('span', { class: 'label' }, `Version ${state.version}`) : null,
-      h('p', { class: 'small dim' }, 'A quiet, always-on-top to-do list for Mac, in the look of Slate.')),
+      h('p', { class: 'small dim' }, `A quiet, always-on-top to-do list for ${WIN ? 'Windows' : 'Mac'}, in the look of Slate.`)),
     h('section', { class: 'group' }, h('div', { class: 'tile' }, [
       fact('Created by', h('a', { class: 'link', href: SITE, title: SITE }, AUTHOR)),
       fact('Copyright', COPYRIGHT),
       fact('Source', h('a', { class: 'link', href: REPO }, 'github.com/Aivarasli/todo_slate')),
     ])),
-    h('p', { class: 'small dim about-fine' }, 'Local only: no account, no tracking, no network. Your tasks stay on this Mac.'),
+    h('p', { class: 'small dim about-fine' }, `Local only: no account, no tracking, no network. Your tasks stay on ${HOST}.`),
     h('p', { class: 'small dim about-fine' }, 'Fonts: Funnel Display, Funnel Sans and Martian Mono, under the SIL Open Font License 1.1.'),
   );
 }
@@ -1228,7 +1247,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (menuEl && e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }
   if (isTyping(e.target)) return;
-  if (e.metaKey && !e.shiftKey && e.key === 'z' && state.undo) { e.preventDefault(); undo(); return; }
+  if (meta && !e.shiftKey && e.key === 'z' && state.undo) { e.preventDefault(); undo(); return; }
   if (meta || e.altKey) return;
   if (state.mode === 'settings') { if (e.key === 'Escape') { e.preventDefault(); leaveSettings(); } return; }
   if (state.mode === 'about') { if (e.key === 'Escape') { e.preventDefault(); openSettings(); } return; }

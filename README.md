@@ -31,6 +31,8 @@ Anywhere:
 | `Opt Shift T` | Show or hide the list |
 | `Opt Shift C` | Turn click-through on or off |
 
+On Windows the same three are `Ctrl Alt Space`, `Ctrl Alt T` and `Ctrl Alt C` (Alt Space belongs to the window menu there), and `Cmd` becomes `Ctrl` everywhere.
+
 In the list:
 
 | Keys | Does |
@@ -59,6 +61,12 @@ In the calendar: arrows move by day and week, `PageUp` `PageDown` by month (with
 If another app already owns a shortcut, Slate Tasks still starts; that shortcut is just not registered.
 
 ## Install
+
+### Windows
+
+Every push also builds a Windows installer: download the `slate-tasks-windows` artifact from the latest run, unzip it and run the `.exe`. It installs for your user only, no admin rights. It is not signed, so SmartScreen may say *Windows protected your PC*: choose **More info**, then **Run anyway**. The window has its own minimize and hide buttons, and a tray icon in the taskbar (left click for the menu).
+
+### macOS
 
 Every push builds a universal `.dmg` (Apple silicon and Intel) in GitHub Actions: open the latest run under **Actions**, download the `slate-tasks-macos` artifact, open the `.dmg` and drag the app to Applications.
 
