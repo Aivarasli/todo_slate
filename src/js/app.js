@@ -7,6 +7,7 @@ import * as S from './settings.js';
 import { native } from './native.js';
 import { createCalendar } from './calendar.js';
 import { wireReorder, isReordering } from './reorder.js';
+import * as P from './pictures.js';
 
 const COLLAPSED = { w: 420, h: 56 };
 const DEFAULT_SIZE = { w: 360, h: 560 };
@@ -32,6 +33,9 @@ const state = {
   focusFallback: null, // row index to focus when the ticked row has left the list
   focusSel: null,
   popId: null, // the task just ticked or unticked, for its animation
+  picId: null, // the task that just got a picture, for the avatar's entrance
+  lightId: null, // the task whose picture is open in the lightbox
+  lightSrc: null, // that picture, once loaded
   leaving: new Set(), // rows playing their exit animation
   undo: null, // { tasks } snapshot to restore
   message: null, // text shown in the footer
@@ -77,7 +81,9 @@ els.main.append(els.titlebar, els.head, els.add, els.tabs, els.scroll, els.foot)
 els.settings.append(els.sTitlebar, els.sScroll);
 els.about.append(els.aTitlebar, els.aScroll);
 els.sheet = h('div', { class: 'sheet', hidden: true });
-els.win = h('div', { class: 'win' }, els.main, els.settings, els.about, els.strip, els.sheet);
+els.lb = h('div', { class: 'lb', hidden: true });
+els.hint = h('div', { class: 'drop-hint label', hidden: true, 'aria-hidden': 'true' });
+els.win = h('div', { class: 'win' }, els.main, els.settings, els.about, els.strip, els.sheet, els.lb, els.hint);
 document.getElementById('root').append(els.win);
 
 const filter = () => state.settings.filter;
@@ -201,6 +207,244 @@ function addFromInput() {
   commit(state.tasks.concat([task]));
 }
 
+// ---------- pictures ----------
+// A short note in the footer that carries no Undo.
+function flash(text, ms = 4500) {
+  state.message = text;
+  state.undo = null;
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => { state.message = null; if (state.mode === 'main') renderFoot(); }, ms);
+  if (state.mode === 'main') renderFoot();
+}
+
+const FAIL = { large: 'That picture is over 40 MB.', decode: 'Could not read that picture.' };
+
+// Stored files that no task points to any more are deleted, once the undo window has passed
+// (undoing a delete needs the file back).
+let gcTimer = null;
+function scheduleGc() { clearTimeout(gcTimer); gcTimer = setTimeout(gc, UNDO_MS + 1000); }
+async function gc() {
+  if (state.undo) { scheduleGc(); return; }
+  try {
+    const stored = await P.keys();
+    const used = L.imageIds(state.tasks);
+    for (const k of stored) if (!used.has(k)) await P.remove(k);
+  } catch { /* storage unavailable: nothing to clean */ }
+}
+
+// Resizes and stores the file; resolves with the new picture record or null (after telling the user).
+async function storePicture(file) {
+  if (!P.isImage(file)) { flash('Only pictures can be attached.'); return null; }
+  let prep;
+  try { prep = await P.prepare(file); } catch (err) { flash(FAIL[err && err.message] || FAIL.decode); return null; }
+  const id = L.newId();
+  try { await P.put(id, prep.blob); } catch { flash('Could not store the picture.'); return null; }
+  scheduleGc();
+  return { id, w: prep.w, h: prep.h, bytes: prep.bytes, thumb: prep.thumb };
+}
+
+async function attachPicture(id, file) {
+  const img = await storePicture(file);
+  if (!img) return false;
+  const t = state.tasks.find((x) => x.id === id);
+  if (!t) return false; // the task went away while the picture was being prepared
+  if (t.img) setUndo(state.tasks, 'Picture replaced.');
+  state.picId = id;
+  commit(L.setImage(state.tasks, id, img), { focusId: id });
+  return true;
+}
+
+// Dropping a picture on the Add field makes a new task named after the file.
+async function taskFromPicture(file) {
+  const img = await storePicture(file);
+  if (!img) return;
+  const task = L.createTask({ title: P.titleFromName(file.name) || 'Picture', due: state.today, img });
+  if (filter() === 'done') setFilter('today', true);
+  state.picId = task.id;
+  commit(state.tasks.concat([task]), { focusId: task.id });
+}
+
+function removePicture(id) {
+  const t = state.tasks.find((x) => x.id === id);
+  if (!t || !t.img) return;
+  setUndo(state.tasks, 'Picture removed.');
+  if (state.lightId === id) state.lightId = null;
+  closeMenu();
+  commit(L.setImage(state.tasks, id, null), { focusId: id });
+  scheduleGc();
+}
+
+function clearPictures() {
+  if (!state.tasks.some((t) => t.img)) return;
+  const prev = state.tasks;
+  setUndo(prev, 'Pictures removed.');
+  state.lightId = null;
+  commit(prev.map((t) => (t.img ? L.setImage([t], t.id, null)[0] : t)));
+  scheduleGc();
+}
+
+// The lightbox: a small sheet over the window. The thumbnail shows at once, the full picture follows.
+function openPicture(id) {
+  const t = state.tasks.find((x) => x.id === id);
+  if (!t || !t.img || state.mode !== 'main') return;
+  closeMenu();
+  state.lightId = id;
+  state.lightSrc = null;
+  state.fresh = 'lb';
+  state.dateId = null; state.calOpen = false;
+  render();
+  P.dataURL(t.img.id).then((src) => {
+    if (state.lightId !== id) return;
+    state.lightSrc = src || false; // false: the file is missing
+    paintLightImage();
+  });
+}
+
+function closePicture() {
+  if (!state.lightId) return;
+  state.focusId = state.lightId;
+  state.lightId = null;
+  render();
+}
+
+let lbImg = null;
+function paintLightImage() {
+  if (!lbImg) return;
+  const miss = els.lb.querySelector('.lb-missing');
+  if (state.lightSrc) { lbImg.src = state.lightSrc; lbImg.classList.add('ready'); }
+  if (miss) miss.hidden = state.lightSrc !== false;
+}
+
+function renderLightbox() {
+  const t = state.mode === 'main' && state.lightId ? state.tasks.find((x) => x.id === state.lightId) : null;
+  if (!t || !t.img) {
+    state.lightId = null;
+    if (!els.lb.hidden) { els.lb.hidden = true; clear(els.lb); lbImg = null; }
+    return;
+  }
+  const info = `${t.img.w} × ${t.img.h}${t.img.bytes ? ' · ' + P.formatBytes(t.img.bytes) : ''}`;
+  lbImg = h('img', { class: 'lb-img', alt: t.title, src: state.lightSrc || t.img.thumb, draggable: 'false' });
+  if (state.lightSrc) lbImg.classList.add('ready');
+  const aspect = `${t.img.w} / ${t.img.h}`;
+  const closeBtn = h('button', { class: 'btn quiet', type: 'button', onClick: closePicture }, 'Close ', h('span', { class: 'kbd' }, 'Esc'));
+  clear(els.lb).append(
+    h('div', { class: 'lb-back', onClick: closePicture }),
+    h('div', { class: 'lb-panel' + (state.fresh === 'lb' ? ' enter' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Picture: ' + t.title },
+      h('div', { class: 'lb-head' },
+        h('div', { class: 'what' }, h('span', { class: 'label' }, 'Picture'), h('b', null, t.title)),
+        closeBtn),
+      h('div', { class: 'lb-stage', style: `--aspect:${aspect}` }, lbImg,
+        h('span', { class: 'label lb-missing', hidden: state.lightSrc !== false }, 'The picture file is missing')),
+      h('div', { class: 'lb-foot' },
+        h('span', { class: 'label' }, info),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'btn', type: 'button', onClick: () => removePicture(t.id) }, 'Remove ', h('span', { class: 'kbd' }, 'Del')))));
+  els.lb.hidden = false;
+  if (state.fresh === 'lb') closeBtn.focus();
+  else if (!els.lb.contains(document.activeElement)) closeBtn.focus();
+}
+
+els.lb.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePicture(); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && state.lightId) { e.preventDefault(); removePicture(state.lightId); }
+  else if (e.key === 'Tab') {
+    const f = [...els.lb.querySelectorAll('button')];
+    if (!f.length) return;
+    const i = f.indexOf(document.activeElement);
+    e.preventDefault();
+    f[e.shiftKey ? (i <= 0 ? f.length - 1 : i - 1) : (i === f.length - 1 ? 0 : i + 1)].focus();
+  }
+});
+
+// Right-click on an avatar: a one-item menu (plus a way to view).
+let menuEl = null;
+function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
+function showMenu(id, x, y) {
+  closeMenu();
+  const item = (label, key, fn) => h('button', { class: 'mi', type: 'button', role: 'menuitem', onClick: () => { closeMenu(); fn(); } }, label, h('span', { class: 'kbd' }, key));
+  const m = h('div', { class: 'menu', role: 'menu', 'aria-label': 'Picture' },
+    item('Remove picture', 'Del', () => removePicture(id)),
+    h('div', { class: 'sep', role: 'separator' }),
+    item('View picture', 'V', () => openPicture(id)));
+  m.addEventListener('keydown', (e) => {
+    const items = [...m.querySelectorAll('button')];
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); const r = rowFor(id); if (r) r.focus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i <= 0 ? items.length : i) - 1].focus(); }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removePicture(id); }
+    else if (e.key === 'v') { e.preventDefault(); closeMenu(); openPicture(id); }
+  });
+  els.win.append(m);
+  const wr = els.win.getBoundingClientRect();
+  const left = Math.max(8, Math.min(x - wr.left, wr.width - m.offsetWidth - 8));
+  const top = Math.max(8, Math.min(y - wr.top, wr.height - m.offsetHeight - 8));
+  m.style.left = `${left}px`;
+  m.style.top = `${top}px`;
+  menuEl = m;
+  m.querySelector('button').focus();
+}
+document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target)) closeMenu(); }, true);
+window.addEventListener('blur', closeMenu);
+els.scroll.addEventListener('scroll', closeMenu, { passive: true });
+
+// Dropping files from Finder (window drag-and-drop is left to the page in tauri.conf.json).
+const hasFiles = (e) => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'));
+let dropRow = null;
+function setDrop(row, onAdd) {
+  if (dropRow && dropRow !== row) dropRow.classList.remove('drop');
+  dropRow = row || null;
+  if (row) row.classList.add('drop');
+  const on = !!(row || onAdd);
+  els.win.classList.toggle('dropping', on);
+  els.add.classList.toggle('drop', !!onAdd);
+  els.hint.hidden = !(on);
+  if (row) {
+    const t = state.tasks.find((x) => x.id === row.dataset.id);
+    els.hint.textContent = t && t.img ? 'Drop to replace the picture' : 'Drop to attach to this task';
+  } else if (onAdd) els.hint.textContent = 'Drop to make a new task';
+}
+const dropTarget = (e) => {
+  const el = e.target && e.target.closest ? e.target : null;
+  const row = el && el.closest('.row:not(.editing):not(.leaving)');
+  const onAdd = !row && !!(el && el.closest('.add'));
+  return { row: row && els.scroll.contains(row) ? row : null, onAdd };
+};
+const dropAllowed = () => state.mode === 'main' && !state.lightId && !state.calOpen && !state.clickThrough;
+document.addEventListener('dragenter', (e) => { if (hasFiles(e)) e.preventDefault(); });
+document.addEventListener('dragover', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault(); // otherwise the webview would navigate to the file
+  if (!dropAllowed()) { e.dataTransfer.dropEffect = 'none'; setDrop(null, false); return; }
+  const { row, onAdd } = dropTarget(e);
+  e.dataTransfer.dropEffect = row || onAdd ? 'copy' : 'none';
+  setDrop(row, onAdd);
+});
+document.addEventListener('dragleave', (e) => { if (hasFiles(e) && !e.relatedTarget) setDrop(null, false); });
+document.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  const { row, onAdd } = dropTarget(e);
+  setDrop(null, false);
+  if (!dropAllowed()) return;
+  const files = [...e.dataTransfer.files];
+  const file = files.find(P.isImage);
+  if (!file) { flash(files.length ? 'Only pictures can be attached.' : 'Nothing to attach.'); return; }
+  if (row) attachPicture(row.dataset.id, file);
+  else if (onAdd) taskFromPicture(file);
+  else flash('Drop a picture onto a task.');
+});
+
+// Cmd V with a task focused attaches the picture on the clipboard.
+document.addEventListener('paste', (e) => {
+  if (state.mode !== 'main' || state.lightId || isTyping(e.target)) return;
+  const row = document.activeElement && document.activeElement.closest ? document.activeElement.closest('.row') : null;
+  const file = [...((e.clipboardData && e.clipboardData.files) || [])].find(P.isImage);
+  if (!row || !file) return;
+  e.preventDefault();
+  attachPicture(row.dataset.id, file);
+});
+
 function startEdit(id) {
   state.editingId = id;
   state.dateId = null;
@@ -275,13 +519,16 @@ function render() {
   els.settings.hidden = state.mode !== 'settings';
   els.about.hidden = state.mode !== 'about';
   els.strip.hidden = state.mode !== 'collapsed';
+  if (state.mode !== 'main') { state.lightId = null; closeMenu(); }
   if (state.mode === 'main') { renderTitlebar(); renderHead(); renderTabs(); renderList(); renderFoot(); }
   else if (state.mode === 'settings') renderSettings();
   else if (state.mode === 'about') renderAbout();
   else renderStrip();
   renderSheet();
+  renderLightbox();
   applyFocus();
   state.popId = null;
+  state.picId = null;
   state.fresh = null;
 }
 
@@ -432,12 +679,24 @@ function rowEl(t, g) {
     li.append(h('span', { class: 't', onClick: (e) => { if (e.target.closest('a')) return; toggle(t.id); } },
       h('span', { class: 'tx' }, titleNodes(t.title))));
     const label = t.due ? D.formatDue(t.due, state.today, t.time) : '';
-    li.append(label
-      ? h('button', {
+    const meta = h('div', { class: 'meta' });
+    if (t.img) {
+      li.classList.add('haspic');
+      meta.append(h('button', {
+        class: 'av' + (state.picId === t.id ? ' pop' : ''), type: 'button', tabindex: '-1',
+        'aria-label': 'View picture: ' + t.title, title: 'View picture',
+        style: `background-image:url(${t.img.thumb})`,
+        onClick: (e) => { e.stopPropagation(); openPicture(t.id); },
+        onContextmenu: (e) => { e.preventDefault(); e.stopPropagation(); showMenu(t.id, e.clientX, e.clientY); },
+      }));
+    }
+    if (label) {
+      meta.append(h('button', {
         class: 'pill' + (t.due < state.today && !t.done ? ' on' : ''), type: 'button', tabindex: '-1', 'aria-label': `Due: ${label}. Change date`,
         onClick: (e) => { e.stopPropagation(); state.dateId === t.id ? closeBar(t.id) : openBar(t.id, false); },
-      }, label)
-      : h('span'));
+      }, label));
+    }
+    li.append(meta);
     li.append(h('button', {
       class: 'x', type: 'button', tabindex: '-1', 'aria-label': 'Delete: ' + t.title, title: 'Delete',
       onClick: (e) => { e.stopPropagation(); remove(t.id, g.tasks); },
@@ -496,7 +755,7 @@ function closeCal() {
 // cut off by the list's scrolling, whatever size the window is.
 function renderSheet() {
   const t = state.mode === 'main' && state.calOpen ? state.tasks.find((x) => x.id === state.dateId) : null;
-  els.main.inert = !!t;
+  els.main.inert = !!t || !!state.lightId;
   if (!t) { els.sheet.hidden = true; clear(els.sheet); return; }
   const today = state.today;
   const quick = (label, due) => h('button', {
@@ -532,6 +791,7 @@ function onRowKey(e, t, g) {
   else if (k === 'm') { stop(); applyDue(t.id, D.addDays(state.today, 1)); }
   else if (k === 'w') { stop(); applyDue(t.id, D.nextMonday(state.today)); }
   else if (k === '0') { stop(); applyDue(t.id, null); }
+  else if (k === 'v') { if (t.img) { stop(); openPicture(t.id); } }
   else if (k === 'o') { const href = L.firstLink(t.title); if (href) { stop(); native.openUrl(href); } }
   else if (k === 'Escape') { if (state.dateId === t.id) closeBar(t.id); else e.target.blur(); }
   else if (k === 'Home' || k === 'End') {
@@ -660,11 +920,22 @@ const SHORTCUTS_LIST = [
   ['Open the calendar', 'C'],
   ['Clear the date', '0'],
   ['Open a link in the task', 'O'],
+  ['View the picture', 'V'],
+  ['Paste a picture onto the task', 'Cmd V'],
   ['Undo', 'Cmd Z'],
   ['Settings', 'Cmd ,'],
   ['Collapse or expand', 'Cmd .'],
   ['Show these shortcuts', '?'],
 ];
+
+function picturesRow() {
+  const withPic = state.tasks.filter((t) => t.img);
+  const bytes = withPic.reduce((n, t) => n + (t.img.bytes || 0), 0);
+  return h('div', { class: 'set-row' },
+    h('div', { class: 'what' }, h('b', null, 'Pictures'),
+      h('span', { class: 'small dim' }, withPic.length ? `${withPic.length} on tasks · ${P.formatBytes(bytes)}` : 'Drop an image onto a task')),
+    withPic.length ? h('button', { class: 'btn', type: 'button', onClick: () => { clearPictures(); renderSettings(); } }, 'Remove all') : null);
+}
 
 function renderSettings() {
   clear(els.sTitlebar).append(
@@ -703,6 +974,7 @@ function renderSettings() {
       switchRow('Open at login', null, state.autostart, async (v) => { state.autostart = v; renderSettings(); await native.setAutostart(v); }),
       h('div', { class: 'set-row' }, h('b', { style: 'font-weight:500' }, 'Theme'),
         h('div', { class: 'seg' }, themeBtn('auto', 'Auto'), themeBtn('light', 'Light'), themeBtn('dark', 'Dark'))),
+      picturesRow(),
       h('div', { class: 'set-row' }, h('div', { class: 'what' }, h('b', null, 'Storage'), h('span', { class: 'small dim' }, 'On this Mac only. No account, no tracking.'))),
       h('button', { class: 'set-row nav', type: 'button', onClick: openAbout },
         h('div', { class: 'what' }, h('b', null, 'About Slate Tasks'), h('span', { class: 'small dim' }, `Created by ${AUTHOR}`)),
@@ -777,7 +1049,7 @@ document.addEventListener('keydown', (e) => {
   if (state.mode === 'settings') { if (e.key === 'Escape') { e.preventDefault(); leaveSettings(); } return; }
   if (state.mode === 'about') { if (e.key === 'Escape') { e.preventDefault(); openSettings(); } return; }
   if (state.mode !== 'main') return;
-  if (e.target.closest && e.target.closest('.datebar, .sheet')) return;
+  if (e.target.closest && e.target.closest('.datebar, .sheet, .lb, .menu')) return;
 
   const k = e.key;
   if (k === 'n' || k === 'a' || k === '/') { e.preventDefault(); els.input.focus(); }
@@ -828,7 +1100,7 @@ window.addEventListener('focus', () => {
 });
 
 // Never rebuild the list under an open editor, a drag, or a row that is still leaving.
-const busy = () => !!(state.editingId || state.dateId || isReordering() || pendingLeaves > 0);
+const busy = () => !!(state.editingId || state.dateId || state.lightId || isReordering() || pendingLeaves > 0);
 
 function reloadTasks() {
   state.tasks = store.load();
@@ -841,6 +1113,7 @@ native.listen('toggle-clickthrough', () => setClickThrough(!state.clickThrough))
 
 setInterval(() => { if (D.toISO(new Date()) !== state.today && !busy()) render(); }, 30000);
 
+scheduleGc();
 S.apply(state.settings);
 native.setOnTop(state.settings.onTop);
 native.setAllWorkspaces(state.settings.allWorkspaces);

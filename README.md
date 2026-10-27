@@ -16,6 +16,7 @@ Local only: no account, no tracking, no network.
 - **Quick delete:** a small x in a circle sits beside every task's date. Undo brings it back.
 - **Calendar.** Pick a date from a Slate-styled month calendar that slides up over the list, or use Today, Tomorrow and Next week.
 - **Drag to reorder.** Rows slide aside as you drag, and glide into place on every reorder, tick and delete.
+- **Pictures on tasks.** Drag an image from Finder onto a task (or paste one with `Cmd V` on a focused task). It is resized to fit 1280×720 (720×1280 for portrait, never enlarged) and shown as a small circle beside the date. Click it for a lightbox; right-click it, or press `Del` in the lightbox, to remove it. Dropping on the Add field makes a new task named after the file. Settings shows how many pictures there are and can remove them all.
 - **About** page in Settings.
 - Light and dark, following the system.
 
@@ -46,6 +47,8 @@ In the list:
 | `T` `M` `W` | Due today, tomorrow, next Monday |
 | `0` | Clear the date |
 | `O` | Open the first link in the task |
+| `V` | View the task's picture (`Esc` closes, `Del` removes it) |
+| `Cmd V` | Paste a picture from the clipboard onto the task |
 | `Cmd ,` | Settings |
 | `Cmd .` | Collapse or expand |
 | `?` | Show the shortcuts |
@@ -86,6 +89,7 @@ src/js/settings.js  settings; click-through is deliberately never saved
 src/js/native.js    the only file that talks to Tauri
 src/js/calendar.js  the month calendar
 src/js/reorder.js   drag to reorder, with rows sliding aside
+src/js/pictures.js  resizing dropped images and keeping them in IndexedDB
 src/js/app.js       the list, settings, about and collapsed strip
 src/js/quickadd.js  the quick-add bar
 src-tauri/          window, global shortcuts, menu bar icon, open at login, opening links
@@ -95,6 +99,7 @@ src-tauri/          window, global shortcuts, menu bar icon, open at login, open
 
 - Tasks live in the app's local storage on this Mac. A damaged store is kept aside under a `slate-tasks:v1:backup:` key before anything is overwritten.
 - Opacity uses a transparent window, which on macOS needs Tauri's `macos-private-api`. That rules out the Mac App Store, and does not matter for a downloaded app.
+- Pictures are stored as JPEG blobs in IndexedDB (the full image) with a 96 px thumbnail on the task. Files no task uses are removed a few seconds after the undo window closes.
 - Links open through a small `open_url` command that only accepts `http`, `https` and `mailto` addresses.
 - The app icon is built from Slate's favicon (`src-tauri/icons/icon.svg`) with a soft top light.
 - Fonts (Funnel Display, Funnel Sans, Martian Mono) are self-hosted under the SIL Open Font License 1.1. See `src/fonts/OFL.txt`.
