@@ -51,6 +51,16 @@ test('date lines in English and Lithuanian', () => {
   assert.equal(D.datelineLT(d), 'Antradienis, spalio 27 d.');
 });
 
+test('second-language date line', () => {
+  const d = new Date(2026, 9, 27);
+  assert.equal(D.dateline(d, 'lt'), 'Antradienis, spalio 27 d.');
+  assert.equal(D.dateline(d, 'off'), '');
+  assert.equal(D.dateline(d, 'xx'), '');
+  assert.match(D.dateline(d, 'de'), /^Dienstag/);
+  assert.match(D.dateline(d, 'fr'), /^Mardi/);
+  for (const [c] of D.LANGUAGES) assert.ok(D.dateline(d, c).length > 4, c);
+});
+
 // ---- tasks ----
 test('createTask trims, collapses spaces, rejects empty, limits length', () => {
   assert.equal(L.createTask({ title: '   ' }), null);

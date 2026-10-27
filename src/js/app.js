@@ -630,7 +630,7 @@ function renderHead() {
     h('h1', null, HEAD_TITLES[filter()]),
     h('div', { class: 'dateline' },
       h('span', { class: 'label' }, D.datelineEN(now)),
-      h('span', { class: 'small dim' }, D.datelineLT(now))),
+      D.dateline(now, state.settings.language) ? h('span', { class: 'small dim' }, D.dateline(now, state.settings.language)) : null),
   );
 }
 
@@ -1093,6 +1093,10 @@ function renderSettings() {
       switchRow('Open at login', null, state.autostart, async (v) => { state.autostart = v; renderSettings(); await native.setAutostart(v); }),
       h('div', { class: 'set-row' }, h('b', { style: 'font-weight:500' }, 'Theme'),
         h('div', { class: 'seg' }, themeBtn('auto', 'Auto'), themeBtn('light', 'Light'), themeBtn('dark', 'Dark'))),
+      h('div', { class: 'set-row' }, h('label', { class: 'what', for: 'lang' }, h('b', null, 'Second language'), h('span', { class: 'small dim' }, 'The date line under the title')),
+        h('select', { class: 'select', id: 'lang', onChange: (e) => saveSettings({ language: e.target.value }) },
+          h('option', { value: 'off', selected: state.settings.language === 'off' }, 'None'),
+          ...D.LANGUAGES.map(([c, n]) => h('option', { value: c, selected: state.settings.language === c }, n)))),
       picturesRow(),
       ...storageRows(),
       h('button', { class: 'set-row nav', type: 'button', onClick: openAbout },
