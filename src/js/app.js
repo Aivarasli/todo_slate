@@ -615,7 +615,7 @@ const KEY_CLICK = WIN ? 'Ctrl Alt C' : 'Opt Shift C';
 
 // Windows has no traffic lights and the system title bar is hidden, so the window gets its own two buttons.
 function winControls() {
-  if (!WIN) return null;
+  if (!WIN) return document.createDocumentFragment(); // nothing to add, and never null: append(null) writes the word "null"
   return h('div', { class: 'wctl' },
     h('button', { class: 'wbtn', type: 'button', title: 'Minimize', 'aria-label': 'Minimize', onClick: () => native.minimize() }, minusIcon()),
     h('button', { class: 'wbtn close', type: 'button', title: 'Hide to the tray', 'aria-label': 'Hide to the tray', onClick: () => native.hide() }, crossIcon()));
