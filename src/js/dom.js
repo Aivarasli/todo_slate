@@ -67,3 +67,15 @@ export function minusIcon() {
   svg.append(p);
   return svg;
 }
+
+// DOM append() turns null, undefined and false into the words "null", "undefined" and "false".
+// Optional children are written as `cond ? node : null` all over the app, so drop the empty ones here
+// once, for every append and prepend, instead of trusting each call site.
+if (typeof Element !== 'undefined') {
+  for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+    for (const name of ['append', 'prepend']) {
+      const orig = proto[name];
+      proto[name] = function (...kids) { return orig.apply(this, kids.filter((k) => k != null && k !== false)); };
+    }
+  }
+}
